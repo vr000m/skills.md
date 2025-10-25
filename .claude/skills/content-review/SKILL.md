@@ -19,19 +19,20 @@ Review written content against style guidelines and produce a structured report 
 Determine the content type using these signals, in priority order:
 
 1. **Explicit `--type` flag** overrides all detection.
-2. **YAML frontmatter fields**:
+2. **YAML frontmatter fields — blog only**:
    - Has `slug`, `excerpt`, `category`, `authors` fields -> `blog`
-   - Has `title` and `published_date` but lacks `slug`/`excerpt`/`category` -> `til`
-   - No frontmatter -> continue to step 3
-3. **File path heuristics**:
+   - Other frontmatter combinations -> continue to step 3 (do NOT classify as TIL here — frontmatter with `title` + `published_date` is common in docs too)
+3. **File path heuristics** (run before TIL inference to avoid misclassifying docs):
+   - Path contains `/docs/` or `/documentation/` or `/guides/` -> `technical-doc`
    - Path contains `/til/` or `/tils/` -> `til`
    - Path contains `/blog/` or `/posts/` -> `blog`
-   - Path contains `/docs/` or `/documentation/` -> `technical-doc`
-4. **Content heuristics**:
+4. **Frontmatter — TIL inference** (only if path didn't match):
+   - Has `title` and `published_date` but lacks `slug`/`excerpt`/`category` -> `til`
+5. **Content heuristics**:
    - Under 500 words, single focused topic, learning-oriented -> `til`
    - Multiple code blocks, API references, architecture content -> `technical-doc`
    - Notion-specific artefacts (toggle syntax, database mentions, callout blocks) -> `notion`
-5. **Fallback**: `general`
+6. **Fallback**: `general`
 
 Print the detected type and ask for confirmation before proceeding:
 ```
@@ -62,7 +63,7 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 ### Review Categories
 
 **Style** (all content types):
-- British English spellings (flag American spellings: optimize, realize, behavior, color, etc.)
+- British English spellings in body text (flag American spellings: optimize, realize, behavior, color, etc.). **Exception**: Do not flag American spellings in frontmatter `slug` or `filename` fields — these intentionally use American English for SEO.
 - Oxford comma usage in lists
 - Active voice (flag passive constructions)
 - Conciseness (flag filler phrases, unnecessary adverbs, superlatives)
@@ -73,7 +74,7 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 - Typos and misspellings (transposed letters, dropped characters, stray spaces)
 - Technical terms not in backticks (filenames, functions, CLI commands, env vars, HTML elements)
 
-**Structure** (blog and TIL, adapted by type):
+**Structure** (blog, TIL, and technical-doc — adapted by type):
 - TL;DR present and bolded (blog only)
 - Hero image referenced (blog only)
 - Hook/opening paragraph quality — not overloaded with links and details
@@ -140,7 +141,9 @@ Present findings in this format:
 [Render the applicable checklist (blog 26-item or TIL 13-item) with pass/fail marks]
 ```
 
-For `technical-doc`, `notion`, and `general` content types, skip the Structure, Content Quality, and SEO/Meta sections. Only report Style findings and a simplified checklist.
+For `technical-doc`: report Style findings plus the Structure subset (heading hierarchy, code block language identifiers, code-prose consistency, code example completeness). Skip Content Quality and SEO/Meta.
+
+For `notion` and `general`: report Style findings only. Skip Structure, Content Quality, and SEO/Meta.
 
 ## Phase 5: Inline Suggestions
 
