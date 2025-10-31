@@ -8,6 +8,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 |-------|-------------|
 | content-review | Review content against style guidelines |
 | content-draft | Draft content following style guidelines |
+| dev-plan | Generate and manage development plans |
 
 ## Usage
 
