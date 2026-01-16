@@ -72,21 +72,24 @@ If the user says "edit", let them adjust. If `--dry-run` was specified, stop her
 
 ### Phase 3: Setup Worktrees and Spawn Agents
 
-For each approved task, run these steps using `fan-out.sh`:
+For each approved task, run these steps using `fan-out.sh`.
 
-1. **Get repo info**:
-   ```bash
-   REPO_ROOT="$(git rev-parse --show-toplevel)"
-   BASE_BRANCH="$(git branch --show-current)"
-   ```
+First, locate the skill directory and get repo info:
+```bash
+SKILL_DIR="$(find ~/.claude/skills -maxdepth 1 -name 'fan-out' -type d | head -1)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+BASE_BRANCH="$(git branch --show-current)"
+```
 
-2. **Create worktree** (for each task):
+Then for each task:
+
+1. **Create worktree**:
    ```bash
    WORKTREE=$("${SKILL_DIR}/fan-out.sh" setup "$BASE_BRANCH" "<task-slug>" "$REPO_ROOT")
    ```
-   This creates branch `<base-branch>/task-<slug>` and worktree at `../<repo>-fanout-<slug>`.
+   This creates branch `fanout/<base-slug>-<task-slug>` and worktree at `../<repo>-fanout-<slug>`.
 
-3. **Build agent prompt**: Read the template from `agent-prompt.md` in this skill directory. Replace placeholders:
+2. **Build agent prompt**: Read the template from `agent-prompt.md` in this skill directory. Replace placeholders:
    - `{{TASK_DESCRIPTION}}` — Full task text from the plan
    - `{{TASK_NAME}}` — Short task name
    - `{{TECHNICAL_SPECIFICATIONS}}` — Files to modify, architecture decisions from plan
@@ -97,12 +100,12 @@ For each approved task, run these steps using `fan-out.sh`:
 
    Write the filled prompt to a temp file in the worktree.
 
-4. **Spawn agent**:
+3. **Spawn agent**:
    ```bash
    PID=$("${SKILL_DIR}/fan-out.sh" spawn "$WORKTREE" "$PROMPT_FILE" "$WORKTREE/fan-out.log" --model opus)
    ```
 
-5. **Record state**: After spawning all agents, write `.fan-out-state.json` in the repo root:
+4. **Record state**: After spawning all agents, write `.fan-out-state.json` in the repo root:
    ```json
    {
      "plan_file": "<path>",
@@ -124,7 +127,7 @@ For each approved task, run these steps using `fan-out.sh`:
    }
    ```
 
-6. **Print summary**:
+5. **Print summary**:
    ```
    Fan-out active: N agents spawned
 

@@ -4,9 +4,7 @@ set -euo pipefail
 # fan-out.sh — Worktree setup, agent spawning, monitoring, and cleanup
 # Companion script for the /fan-out skill.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_MODEL="opus"
-DEFAULT_MAX_AGENTS=5
 
 usage() {
   cat <<'EOF'
@@ -22,7 +20,6 @@ Commands:
 
 Environment:
   FANOUT_MODEL=opus|sonnet|haiku   Override default model (opus)
-  FANOUT_MAX_AGENTS=N              Override max parallel agents (5)
 EOF
 }
 
@@ -47,11 +44,10 @@ cmd_setup() {
   parent_dir="$(dirname "$repo_root")"
   local worktree_path="${parent_dir}/${repo_name}-fanout-${slug}"
 
-  # Check if worktree already exists
+  # If worktree already exists, remove it so we get a clean reset
   if [[ -d "$worktree_path" ]]; then
-    echo "WARNING: Worktree already exists at $worktree_path" >&2
-    echo "$worktree_path"
-    return 0
+    echo "WARNING: Removing existing worktree at $worktree_path" >&2
+    git -C "$repo_root" worktree remove "$worktree_path" --force 2>/dev/null || true
   fi
 
   # Create or reset branch to current HEAD (ensures clean base on reruns)
@@ -108,11 +104,12 @@ cmd_status() {
     return 1
   fi
 
-  # Read agents array from JSON state file
+  # Read agents array from JSON state file (pass path via sys.argv to avoid injection)
   local agent_count
-  agent_count=$(python3 -c "
-import json, sys
-with open('$state_file') as f:
+  agent_count=$(python3 - "$state_file" <<'PYEOF'
+import json, os, sys
+
+with open(sys.argv[1]) as f:
     state = json.load(f)
 agents = state.get('agents', [])
 print(len(agents))
@@ -123,8 +120,6 @@ for a in agents:
     branch = a.get('branch', 'unknown')
     worktree = a.get('worktree', 'unknown')
     log_file = a.get('log_file', 'unknown')
-    # Check if process is alive
-    import os
     try:
         os.kill(pid, 0)
         status = 'RUNNING'
@@ -133,7 +128,8 @@ for a in agents:
     except Exception:
         status = 'UNKNOWN'
     print(f'{task_id}|{task_name}|{branch}|{worktree}|{log_file}|{pid}|{status}')
-")
+PYEOF
+)
 
   # Parse output
   local count
@@ -143,7 +139,6 @@ for a in agents:
   echo "==============================="
   echo ""
 
-  local running=0 finished=0
   echo "$agent_count" | tail -n +2 | while IFS='|' read -r tid tname tbranch tworktree tlog tpid tstatus; do
     echo "Agent $tid: $tname"
     echo "  Branch:   $tbranch"
@@ -170,13 +165,13 @@ cmd_cancel() {
     return 1
   fi
 
-  python3 -c "
+  python3 - "$state_file" "$target_id" <<'PYEOF'
 import json, os, signal, sys
 
-with open('$state_file') as f:
+with open(sys.argv[1]) as f:
     state = json.load(f)
 
-target = '$target_id'
+target = sys.argv[2]
 killed = 0
 
 for agent in state.get('agents', []):
@@ -200,7 +195,7 @@ if killed == 0 and target == 'all':
     print('No running agents to cancel')
 elif target != 'all' and killed == 0:
     print(f'Agent {target} not found or already finished')
-"
+PYEOF
 }
 
 # --- cleanup: remove worktrees and branches ---
@@ -214,19 +209,21 @@ cmd_cleanup() {
 
   # First check no agents are still running
   local still_running
-  still_running=$(python3 -c "
-import json, os
-with open('$state_file') as f:
+  still_running=$(python3 - "$state_file" <<'PYEOF'
+import json, os, sys
+
+with open(sys.argv[1]) as f:
     state = json.load(f)
 running = 0
 for a in state.get('agents', []):
     try:
         os.kill(a.get('pid', 0), 0)
         running += 1
-    except:
+    except Exception:
         pass
 print(running)
-")
+PYEOF
+)
 
   if [[ "$still_running" -gt 0 ]]; then
     echo "WARNING: $still_running agent(s) still running. Cancel them first with:" >&2
@@ -234,23 +231,26 @@ print(running)
     return 1
   fi
 
-  # Get repo root from state file
+  # Get repo root and agent info from state file
   local repo_root
-  repo_root=$(python3 -c "
-import json
-with open('$state_file') as f:
+  repo_root=$(python3 - "$state_file" <<'PYEOF'
+import json, sys
+
+with open(sys.argv[1]) as f:
     state = json.load(f)
 print(state.get('repo_root', '.'))
-")
+PYEOF
+)
 
   # Remove worktrees and branches
-  python3 -c "
-import json
-with open('$state_file') as f:
+  python3 - "$state_file" <<'PYEOF' | while IFS='|' read -r worktree branch; do
+import json, sys
+
+with open(sys.argv[1]) as f:
     state = json.load(f)
 for a in state.get('agents', []):
     print(a.get('worktree', '') + '|' + a.get('branch', ''))
-" | while IFS='|' read -r worktree branch; do
+PYEOF
     if [[ -n "$worktree" && -d "$worktree" ]]; then
       echo "Removing worktree: $worktree"
       git -C "$repo_root" worktree remove "$worktree" --force 2>/dev/null || true
