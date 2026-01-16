@@ -57,8 +57,8 @@ cmd_setup() {
   # Create branch from current HEAD (ignore error if already exists)
   git -C "$repo_root" branch "$branch_name" HEAD 2>/dev/null || true
 
-  # Create worktree
-  git -C "$repo_root" worktree add "$worktree_path" "$branch_name"
+  # Create worktree (-q suppresses progress so stdout only has the path)
+  git -C "$repo_root" worktree add -q "$worktree_path" "$branch_name"
 
   echo "$worktree_path"
 }
