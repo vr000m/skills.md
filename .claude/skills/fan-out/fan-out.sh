@@ -120,13 +120,16 @@ for a in agents:
     branch = a.get('branch', 'unknown')
     worktree = a.get('worktree', 'unknown')
     log_file = a.get('log_file', 'unknown')
-    try:
-        os.kill(pid, 0)
-        status = 'RUNNING'
-    except (ProcessLookupError, PermissionError):
-        status = 'FINISHED'
-    except Exception:
-        status = 'UNKNOWN'
+    if pid <= 0:
+        status = 'INVALID_PID'
+    else:
+        try:
+            os.kill(pid, 0)
+            status = 'RUNNING'
+        except (ProcessLookupError, PermissionError):
+            status = 'FINISHED'
+        except Exception:
+            status = 'UNKNOWN'
     print(f'{task_id}|{task_name}|{branch}|{worktree}|{log_file}|{pid}|{status}')
 PYEOF
 )
@@ -182,6 +185,10 @@ for agent in state.get('agents', []):
     if target != 'all' and tid != target:
         continue
 
+    if pid <= 0:
+        print(f'Agent {tid} ({name}) has invalid PID {pid} — skipping')
+        continue
+
     try:
         os.kill(pid, signal.SIGTERM)
         print(f'Killed agent {tid} ({name}) PID {pid}')
@@ -216,8 +223,11 @@ with open(sys.argv[1]) as f:
     state = json.load(f)
 running = 0
 for a in state.get('agents', []):
+    pid = a.get('pid', 0)
+    if pid <= 0:
+        continue
     try:
-        os.kill(a.get('pid', 0), 0)
+        os.kill(pid, 0)
         running += 1
     except Exception:
         pass
