@@ -85,9 +85,11 @@ Then for each task:
 
 1. **Create worktree**:
    ```bash
-   WORKTREE=$("${SKILL_DIR}/fan-out.sh" setup "$BASE_BRANCH" "<task-slug>" "$REPO_ROOT")
+   WORKTREE=$("${SKILL_DIR}/fan-out.sh" setup "$BASE_BRANCH" "<task-id>-<task-slug>" "$REPO_ROOT")
    ```
-   This creates branch `fanout/<base-slug>-<task-slug>` and worktree at `../<repo>-fanout-<slug>`.
+   Always prefix the slug with the task ID (e.g., `"1-add-api-endpoint"`, `"2-add-migration"`) to prevent collisions when different tasks slugify to the same string.
+
+   This creates branch `fanout/<base-slug>-<id>-<task-slug>` and worktree at `../<repo>-fanout-<id>-<slug>`.
 
 2. **Build agent prompt**: Read the template from `agent-prompt.md` in this skill directory. Replace placeholders:
    - `{{TASK_DESCRIPTION}}` — Full task text from the plan

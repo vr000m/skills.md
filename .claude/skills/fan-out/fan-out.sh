@@ -50,8 +50,8 @@ cmd_setup() {
     git -C "$repo_root" worktree remove "$worktree_path" --force 2>/dev/null || true
   fi
 
-  # Create or reset branch to current HEAD (ensures clean base on reruns)
-  git -C "$repo_root" worktree add -q -B "$branch_name" "$worktree_path" HEAD
+  # Create or reset branch to base_branch tip (not HEAD, which may differ)
+  git -C "$repo_root" worktree add -q -B "$branch_name" "$worktree_path" "$base_branch"
 
   echo "$worktree_path"
 }
