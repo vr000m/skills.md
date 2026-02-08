@@ -227,6 +227,18 @@ tail -100 <worktree>/fan-out.log
 - **Worktree location**: `../<repo-name>-fanout-<slug>` (sibling to repo)
 - **Branch naming**: `fanout/<base-slug>-<task-slug>`
 
+## Recommended Codex CLI Config
+
+Keep defaults unless you have a reason to override.
+
+If you hit shell argument limits on very large plans, switch to prompt-file mode:
+
+```bash
+export FANOUT_PROMPT_MODE=file
+# If your Codex CLI expects a different prompt flag, set it here:
+# export FANOUT_PROMPT_FLAG=--prompt-file
+```
+
 ## Constraints
 
 - Agents run non-interactively — configure permission flags via `FANOUT_PERMS_FLAG`
