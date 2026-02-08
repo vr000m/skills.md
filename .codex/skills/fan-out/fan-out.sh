@@ -106,7 +106,8 @@ cmd_spawn() {
   local -a cmd_args
   cmd_args=("$cmd" "$prompt_flag" "$prompt_value")
   if [[ -n "$perms_flag" ]]; then
-    cmd_args+=("$perms_flag")
+    read -r -a perms_split <<< "$perms_flag"
+    cmd_args+=("${perms_split[@]}")
   fi
   if [[ -n "$model" ]]; then
     cmd_args+=("--model" "$model")
@@ -202,7 +203,7 @@ cmd_cancel() {
   fi
 
   python3 - "$state_file" "$target_id" <<'PYEOF'
-import json, os, signal, sys
+import json, os, signal, subprocess, sys
 
 with open(sys.argv[1]) as f:
     state = json.load(f)
@@ -220,6 +221,19 @@ for agent in state.get('agents', []):
 
     if pid <= 0:
         print(f'Agent {tid} ({name}) has invalid PID {pid} — skipping')
+        continue
+
+    try:
+        cmdline = subprocess.check_output(["ps", "-p", str(pid), "-o", "command="], text=True).strip()
+    except Exception:
+        cmdline = ""
+
+    expected_cmd = os.environ.get("FANOUT_CMD", "codex")
+    if not cmdline:
+        print(f'Agent {tid} ({name}) PID {pid} already finished')
+        continue
+    if expected_cmd and expected_cmd not in cmdline:
+        print(f'Skipping PID {pid} for agent {tid} ({name}); command does not match {expected_cmd!r}')
         continue
 
     try:
