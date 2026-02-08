@@ -82,10 +82,12 @@ cmd_spawn() {
     return 1
   fi
 
-  # Launch claude in the worktree directory
+  # Launch claude in the worktree directory.
+  # exec replaces the subshell so $! is the claude process PID (not a wrapper),
+  # which lets cancel verify the process identity before sending SIGTERM.
   (
     cd "$worktree_path"
-    claude -p "$(cat "$prompt_file")" \
+    exec claude -p "$(cat "$prompt_file")" \
       --dangerously-skip-permissions \
       --model "$model" \
       > "$log_file" 2>&1
@@ -169,13 +171,24 @@ cmd_cancel() {
   fi
 
   python3 - "$state_file" "$target_id" <<'PYEOF'
-import json, os, signal, sys
+import json, os, signal, subprocess, sys
 
 with open(sys.argv[1]) as f:
     state = json.load(f)
 
 target = sys.argv[2]
 killed = 0
+
+def is_claude_process(pid):
+    """Verify PID is still a claude process (not a reused PID)."""
+    try:
+        result = subprocess.run(
+            ['ps', '-p', str(pid), '-o', 'args='],
+            capture_output=True, text=True, timeout=5
+        )
+        return result.returncode == 0 and 'claude' in result.stdout
+    except Exception:
+        return False
 
 for agent in state.get('agents', []):
     tid = str(agent.get('task_id', ''))
@@ -187,6 +200,10 @@ for agent in state.get('agents', []):
 
     if pid <= 0:
         print(f'Agent {tid} ({name}) has invalid PID {pid} — skipping')
+        continue
+
+    if not is_claude_process(pid):
+        print(f'Agent {tid} ({name}) PID {pid} is no longer a claude process — skipping')
         continue
 
     try:
