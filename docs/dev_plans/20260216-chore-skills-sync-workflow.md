@@ -75,6 +75,8 @@ Executed after tool install:
 
 - Issue: `check-sync` initially reported drift for non-repo-managed global skills.
 - Solution: Added `MANAGED_SKILLS` allowlist so sync/promote/bootstrap/check only target repo-owned skills.
+- Issue: Remote guideline fetch in a `curl | tee` pipeline could partially write target files on transfer failure.
+- Solution: Updated `sync`/`promote`/`bootstrap` to download guidelines to a temporary file first, then copy to targets only on successful fetch.
 
 ## Acceptance Criteria
 
@@ -89,4 +91,4 @@ Executed after tool install:
 
 ## Final Results
 
-Implemented a full sync workflow with explicit authority rules, promotion guardrails, managed-scope allowlisting, and drift detection. Follow-up review fixes made `bootstrap` non-destructive by default (with `--force` for overwrite), ensured `promote`/`bootstrap` both refresh authoritative content guidelines, and reduced remote guideline fetches in drift checks. The repo is on branch `chore/skills-sync-workflow`, and the process is documented for daily use, exception handling, and new-machine bootstrap.
+Implemented a full sync workflow with explicit authority rules, promotion guardrails, managed-scope allowlisting, and drift detection. Follow-up review fixes made `bootstrap` non-destructive by default (with `--force` for overwrite), ensured `promote`/`bootstrap` both refresh authoritative content guidelines, reduced remote guideline fetches in drift checks, and hardened guideline updates to avoid partial writes by using a temp download before replacing targets. The repo is on branch `chore/skills-sync-workflow`, and the process is documented for daily use, exception handling, and new-machine bootstrap.
