@@ -1,5 +1,5 @@
 <!-- Source: /Users/vr000m/Code/vr000m/varunsingh.net/.claude/content-guidelines.md -->
-<!-- Last synced: 2026-02-15 -->
+<!-- Last synced: 2026-02-16 -->
 <!-- If the source file has been updated, re-copy it here. -->
 
 # Content Creation Guidelines
@@ -23,8 +23,10 @@ Blog posts target engineers and product managers, explaining complex topics simp
   - Excessive adverbs ("really", "very", "extremely")
   - Superfluous words and filler phrases
   - **Comma splices**: Never join two independent clauses with just a comma. Use a full stop, semicolon, or em dash. Wrong: "The model is fast, it runs locally." Right: "The model is fast. It runs locally." or "The model is fast — it runs locally."
-- **Proofread for missing words and typos**: Check for dropped articles (a/an/the), missing subjects ("and have a few days off" -> "and I have a few days off"), missing relative pronouns ("a format contains" -> "a format that contains"), and incorrect verb forms after auxiliaries ("started traverse" -> "started traversing"). Also run a spellcheck pass — common quick-draft errors include transposed letters ("avoding" -> "avoiding"), dropped characters ("woktrees" -> "worktrees"), and stray spaces in compound terms ("X- SIP" -> "X-SIP")
+- **Proofread for missing words and typos**: Check for dropped articles (a/an/the), missing subjects ("and have a few days off" → "and I have a few days off"), missing relative pronouns ("a format contains" → "a format that contains"), and incorrect verb forms after auxiliaries ("started traverse" → "started traversing"). Also check for sentence fragments: subordinate clauses ("Which means...", "Because the...") that start a new sentence but lack an independent clause. Either join them to the previous sentence or rephrase with a proper subject ("This means..."). Parenthetical asides within a sentence start with a lowercase letter: "it takes ~300 ms (in pipecat, the timestamps from...)". Also run a spellcheck pass — common quick-draft errors include transposed letters ("avoding" → "avoiding"), dropped characters ("woktrees" → "worktrees"), and stray spaces in compound terms ("X- SIP" → "X-SIP")
 - **No repetition**: Avoid repeating statements or concepts unless explicitly for emphasis or to improve readability in complex arguments. Within a single post, do not present the same information twice in different forms (e.g., a bullet summary and then a detailed section covering the same items) — pick one treatment and commit to it
+- **Expand acronyms on first use**: Write "VAD (Voice Activity Detection)" on the first occurrence. Well-known acronyms in the target audience's domain (e.g., STT, LLM, API) may be left unexpanded
+- **No duplicate links**: Do not link the same URL twice in the same paragraph. Link it once with the most descriptive anchor text and refer to it in plain text thereafter
 - **Active voice**: Prefer active voice over passive voice
 - **Personal perspective**: Use first-person narrative where appropriate ("I think", "we observed") to create connection
 - **Avoid lists in body**: Do not use bullet points or numbered lists in the main body unless they improve clarity for procedural content. Lists should only appear:
@@ -110,7 +112,7 @@ Note: TILs (Today I Learned posts) are exempt from the TL;DR and hero image requ
   audio_url: /static/audio/til/{tag}/{slug}.aac   # optional
   ---
   ```
-- **Post-publication updates**: When appending new information to a published post, use a bold label with the year-month: `**Updated (YYYY-MM)**: ...`. Place updates at the end of the post, before any closing/forward-looking sentence. Keep updates self-contained — a reader skimming should understand the update without re-reading the whole post
+- **Post-publication updates**: When appending new information to a published post, use a bold label with the year-month: `**Updated (YYYY-MM)**: …`. Place updates at the end of the post, before any closing/forward-looking sentence. Keep updates self-contained — a reader skimming should understand the update without re-reading the whole post
 - **Images**: Store source hero-image PNGs in `/images/wip/`. Generated/optimised social images are stored in `/images/blog/YYYY/`
 - **File naming**: Use kebab-case for filenames matching the URL slug
 
@@ -152,6 +154,8 @@ Always ask for clarification on:
 - [ ] Code examples are self-contained or explicitly mark omissions
 - [ ] Code comments accurate (no stale comments from prior refactors)
 - [ ] No duplicate information presented in two forms within the same post
+- [ ] Acronyms expanded on first use (except well-known: STT, LLM, API)
+- [ ] No duplicate links (same URL linked twice in the same paragraph)
 
 ### TIL-Specific Checklist
 
@@ -167,6 +171,8 @@ TILs are shorter and skip some blog requirements. Use this subset instead of the
 - [ ] Cross-block consistency: shared identifiers (labels, filenames, usernames) match across all code blocks
 - [ ] Code examples are self-contained or explicitly mark omissions
 - [ ] No typos or misspellings
+- [ ] Acronyms expanded on first use (except well-known: STT, LLM, API)
+- [ ] No duplicate links (same URL linked twice in the same paragraph)
 - [ ] Does not end abruptly on a bare code block, bullet list, or link
 - [ ] Ends with a forward-looking close (even a single sentence)
 - [ ] Post-publication updates use `**Updated (YYYY-MM)**:` format
@@ -252,28 +258,28 @@ TILs are shorter and skip some blog requirements. Use this subset instead of the
 
 ### Technical Deep Dives
 
-- **Structure**: Problem -> Analysis -> Solution -> Implementation -> Results
+- **Structure**: Problem → Analysis → Solution → Implementation → Results
 - **Length**: 1,200-2,000 words
 - **Code examples**: Essential, with proper syntax highlighting
 - **Diagrams**: Use when helpful for complex concepts
 
 ### Industry Analysis
 
-- **Structure**: Context -> Trend Analysis -> Implications -> Predictions
+- **Structure**: Context → Trend Analysis → Implications → Predictions
 - **Length**: 800-1,200 words
 - **Data**: Include relevant metrics and benchmarks
 - **References**: Link to authoritative sources
 
 ### Tutorial Content
 
-- **Structure**: Prerequisites -> Step-by-step -> Troubleshooting -> Next Steps
+- **Structure**: Prerequisites → Step-by-step → Troubleshooting → Next Steps
 - **Length**: 1,000-1,800 words
 - **Code samples**: Complete, tested examples
 - **Screenshots**: When necessary for clarity
 
 ### Opinion and Commentary
 
-- **Structure**: Thesis -> Supporting Evidence -> Counter-arguments -> Conclusion
+- **Structure**: Thesis → Supporting Evidence → Counter-arguments → Conclusion
 - **Length**: 800-1,200 words
 - **Personal experience**: Essential for credibility
 - **Balanced perspective**: Acknowledge alternative viewpoints
