@@ -14,14 +14,26 @@ MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 
-if [[ "${1:-}" != "--yes" ]]; then
+confirmed=0
+force_overwrite=0
+for arg in "$@"; do
+	case "$arg" in
+	--yes)
+		confirmed=1
+		;;
+	--force)
+		force_overwrite=1
+		;;
+	*)
+		echo "error: unknown argument '$arg' (allowed: --yes, --force)" >&2
+		exit 1
+		;;
+	esac
+done
+
+if [[ "$confirmed" -ne 1 ]]; then
 	echo "error: bootstrap writes global skill dirs; rerun with --yes" >&2
 	exit 1
-fi
-
-force_overwrite=0
-if [[ "${2:-}" == "--force" || "${1:-}" == "--force" ]]; then
-	force_overwrite=1
 fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
