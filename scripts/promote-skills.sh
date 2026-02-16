@@ -26,6 +26,7 @@ copy_guidelines_to_global() {
 	local repo_guidelines_claude="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
 	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
 	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+	local tmp_file=""
 
 	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
 
@@ -35,14 +36,17 @@ copy_guidelines_to_global() {
 		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
 	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
 		if command -v curl >/dev/null 2>&1; then
-			if curl -fsSL "$CONTENT_GUIDELINES_URL" |
-				tee "$global_guidelines_code" >"$global_guidelines_claude"; then
+			tmp_file="$(mktemp "$ROOT_DIR/.guidelines.XXXXXX")"
+			if curl -fsSL "$CONTENT_GUIDELINES_URL" -o "$tmp_file"; then
+				cp "$tmp_file" "$global_guidelines_code"
+				cp "$tmp_file" "$global_guidelines_claude"
 				echo "Fetched content guidelines from URL"
 			else
 				cp "$repo_guidelines_code" "$global_guidelines_code"
 				cp "$repo_guidelines_claude" "$global_guidelines_claude"
 				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, used repo content-guidelines copy" >&2
 			fi
+			rm -f "$tmp_file"
 		else
 			cp "$repo_guidelines_code" "$global_guidelines_code"
 			cp "$repo_guidelines_claude" "$global_guidelines_claude"

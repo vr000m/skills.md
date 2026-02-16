@@ -29,6 +29,7 @@ require_dir() {
 copy_guidelines() {
 	local repo_guidelines_code="$REPO_CODEX_DIR/content-review/references/content-guidelines.md"
 	local repo_guidelines_claude="$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
+	local tmp_file=""
 
 	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
 		cp "$CONTENT_GUIDELINES_LOCAL" "$repo_guidelines_code"
@@ -36,12 +37,15 @@ copy_guidelines() {
 		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
 	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
 		if command -v curl >/dev/null 2>&1; then
-			if curl -fsSL "$CONTENT_GUIDELINES_URL" |
-				tee "$repo_guidelines_code" >"$repo_guidelines_claude"; then
+			tmp_file="$(mktemp "$ROOT_DIR/.guidelines.XXXXXX")"
+			if curl -fsSL "$CONTENT_GUIDELINES_URL" -o "$tmp_file"; then
+				cp "$tmp_file" "$repo_guidelines_code"
+				cp "$tmp_file" "$repo_guidelines_claude"
 				echo "Fetched content guidelines from URL"
 			else
 				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, keeping repo content-guidelines copy" >&2
 			fi
+			rm -f "$tmp_file"
 		else
 			echo "warn: curl is not available, keeping repo content-guidelines copy" >&2
 		fi
