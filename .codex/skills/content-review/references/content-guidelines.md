@@ -1,7 +1,3 @@
-<!-- Source: /Users/vr000m/Code/vr000m/varunsingh.net/.claude/content-guidelines.md -->
-<!-- Last synced: 2026-02-16 -->
-<!-- If the source file has been updated, re-copy it here. -->
-
 # Content Creation Guidelines
 
 This document provides comprehensive guidelines for creating blog content and other written materials for the website.
