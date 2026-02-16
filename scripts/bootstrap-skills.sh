@@ -39,23 +39,36 @@ fi
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 
 copy_guidelines_to_global() {
+	local repo_guidelines_code="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
+	local repo_guidelines_claude="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
+	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
+	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+
+	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
+
 	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		cp "$CONTENT_GUIDELINES_LOCAL" "$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
-		cp "$CONTENT_GUIDELINES_LOCAL" "$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_code"
+		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_claude"
 		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
 	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
 		if command -v curl >/dev/null 2>&1; then
-			curl -fsSL "$CONTENT_GUIDELINES_URL" |
-				tee "$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md" \
-					>"$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
-			echo "Fetched content guidelines from URL"
+			if curl -fsSL "$CONTENT_GUIDELINES_URL" |
+				tee "$global_guidelines_code" >"$global_guidelines_claude"; then
+				echo "Fetched content guidelines from URL"
+			else
+				cp "$repo_guidelines_code" "$global_guidelines_code"
+				cp "$repo_guidelines_claude" "$global_guidelines_claude"
+				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, used repo content-guidelines copy" >&2
+			fi
 		else
-			echo "error: curl is required to fetch CONTENT_GUIDELINES_URL" >&2
-			exit 1
+			cp "$repo_guidelines_code" "$global_guidelines_code"
+			cp "$repo_guidelines_claude" "$global_guidelines_claude"
+			echo "warn: curl is not available, used repo content-guidelines copy" >&2
 		fi
 	else
-		echo "error: no content guidelines source configured" >&2
-		exit 1
+		cp "$repo_guidelines_code" "$global_guidelines_code"
+		cp "$repo_guidelines_claude" "$global_guidelines_claude"
+		echo "warn: no content guidelines source configured, used repo content-guidelines copy" >&2
 	fi
 }
 

@@ -39,6 +39,7 @@ Default authority is global skills, not this repo.
 Notes:
 - `promote-skills` and `bootstrap-skills` refresh global `content-guidelines.md` when `content-review` is in `MANAGED_SKILLS`.
 - `bootstrap-skills` is non-destructive unless `--force` is provided.
+- If local/remote authoritative guidelines are unavailable, scripts fall back to the repo `content-guidelines.md` copy and print a warning.
 
 ## Conflict Policy
 

@@ -27,23 +27,26 @@ require_dir() {
 }
 
 copy_guidelines() {
+	local repo_guidelines_code="$REPO_CODEX_DIR/content-review/references/content-guidelines.md"
+	local repo_guidelines_claude="$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
+
 	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		cp "$CONTENT_GUIDELINES_LOCAL" "$REPO_CODEX_DIR/content-review/references/content-guidelines.md"
-		cp "$CONTENT_GUIDELINES_LOCAL" "$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
+		cp "$CONTENT_GUIDELINES_LOCAL" "$repo_guidelines_code"
+		cp "$CONTENT_GUIDELINES_LOCAL" "$repo_guidelines_claude"
 		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
 	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
 		if command -v curl >/dev/null 2>&1; then
-			curl -fsSL "$CONTENT_GUIDELINES_URL" |
-				tee "$REPO_CODEX_DIR/content-review/references/content-guidelines.md" \
-					>"$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
-			echo "Fetched content guidelines from URL"
+			if curl -fsSL "$CONTENT_GUIDELINES_URL" |
+				tee "$repo_guidelines_code" >"$repo_guidelines_claude"; then
+				echo "Fetched content guidelines from URL"
+			else
+				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, keeping repo content-guidelines copy" >&2
+			fi
 		else
-			echo "error: curl is required to fetch CONTENT_GUIDELINES_URL" >&2
-			exit 1
+			echo "warn: curl is not available, keeping repo content-guidelines copy" >&2
 		fi
 	else
-		echo "error: no content guidelines source configured" >&2
-		exit 1
+		echo "warn: no content guidelines source configured, keeping repo content-guidelines copy" >&2
 	fi
 }
 
