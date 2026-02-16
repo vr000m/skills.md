@@ -9,6 +9,9 @@ promote-skills:
 bootstrap-skills:
     ./scripts/bootstrap-skills.sh --yes
 
+bootstrap-skills-force:
+    ./scripts/bootstrap-skills.sh --yes --force
+
 check-sync:
     ./scripts/check-sync.sh
 

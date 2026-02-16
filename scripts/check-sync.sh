@@ -18,7 +18,8 @@ CODEX_DIFF=0
 CLAUDE_DIFF=0
 GUIDE_DIFF=0
 
-for skill in $MANAGED_SKILLS; do
+read -r -a managed_skills <<<"$MANAGED_SKILLS"
+for skill in "${managed_skills[@]}"; do
 	if ! diff -ru --exclude='content-guidelines.md' "$GLOBAL_CODEX_SKILLS_DIR/$skill" "$ROOT_DIR/.codex/skills/$skill" >/dev/null; then
 		echo "drift: .codex/skills/$skill differs from global authority"
 		CODEX_DIFF=1
@@ -41,11 +42,12 @@ if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 			GUIDE_DIFF=1
 		fi
 	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		if ! cmp -s <(curl -fsSL "$CONTENT_GUIDELINES_URL") "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
+		guidelines_remote="$(curl -fsSL "$CONTENT_GUIDELINES_URL")"
+		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
 			echo "drift: codex content-guidelines.md is not authoritative"
 			GUIDE_DIFF=1
 		fi
-		if ! cmp -s <(curl -fsSL "$CONTENT_GUIDELINES_URL") "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
+		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
 			echo "drift: claude content-guidelines.md is not authoritative"
 			GUIDE_DIFF=1
 		fi

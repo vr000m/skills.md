@@ -64,10 +64,14 @@ require_dir "$GLOBAL_CLAUDE_SKILLS_DIR" "GLOBAL_CLAUDE_SKILLS_DIR"
 require_dir "$REPO_CODEX_DIR" "repo codex skills dir"
 require_dir "$REPO_CLAUDE_DIR" "repo claude skills dir"
 
-for skill in $MANAGED_SKILLS; do
+read -r -a managed_skills <<<"$MANAGED_SKILLS"
+for skill in "${managed_skills[@]}"; do
 	sync_skill "$GLOBAL_CODEX_SKILLS_DIR" "$REPO_CODEX_DIR" "$skill"
 	sync_skill "$GLOBAL_CLAUDE_SKILLS_DIR" "$REPO_CLAUDE_DIR" "$skill"
 done
-copy_guidelines
+
+if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
+	copy_guidelines
+fi
 
 echo "Sync complete: global -> repo"

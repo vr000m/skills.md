@@ -31,9 +31,14 @@ Default authority is global skills, not this repo.
 ## Workflow
 
 - Day-to-day: run `just sync-skills` to mirror `global -> repo`
-- Intentional exception: run `just promote-skills` to set `repo -> global`
-- New machine setup: run `just bootstrap-skills`
+- Intentional overwrite: run `just promote-skills` to set `repo -> global`
+- New machine setup: run `just bootstrap-skills` (initialises missing managed skills only)
+- Force bootstrap overwrite when needed: run `just bootstrap-skills-force`
 - Validation: run `just check-sync`
+
+Notes:
+- `promote-skills` and `bootstrap-skills` refresh global `content-guidelines.md` when `content-review` is in `MANAGED_SKILLS`.
+- `bootstrap-skills` is non-destructive unless `--force` is provided.
 
 ## Conflict Policy
 
@@ -74,5 +79,6 @@ MANAGED_SKILLS="content-draft content-review dev-plan fan-out"
 - `just sync-skills`
 - `just promote-skills`
 - `just bootstrap-skills`
+- `just bootstrap-skills-force`
 - `just check-sync`
 - `just lint-scripts`

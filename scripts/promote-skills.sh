@@ -11,16 +11,45 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}"
+CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
+CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 
 if [[ "${1:-}" != "--yes" ]]; then
 	echo "error: promotion is destructive; rerun with --yes" >&2
 	exit 1
 fi
 
-for skill in $MANAGED_SKILLS; do
+read -r -a managed_skills <<<"$MANAGED_SKILLS"
+
+copy_guidelines_to_global() {
+	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
+		cp "$CONTENT_GUIDELINES_LOCAL" "$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
+		cp "$CONTENT_GUIDELINES_LOCAL" "$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
+	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
+		if command -v curl >/dev/null 2>&1; then
+			curl -fsSL "$CONTENT_GUIDELINES_URL" |
+				tee "$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md" \
+					>"$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+			echo "Fetched content guidelines from URL"
+		else
+			echo "error: curl is required to fetch CONTENT_GUIDELINES_URL" >&2
+			exit 1
+		fi
+	else
+		echo "error: no content guidelines source configured" >&2
+		exit 1
+	fi
+}
+
+for skill in "${managed_skills[@]}"; do
 	mkdir -p "$GLOBAL_CODEX_SKILLS_DIR/$skill" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
 	rsync -a --delete "$ROOT_DIR/.codex/skills/$skill/" "$GLOBAL_CODEX_SKILLS_DIR/$skill/"
 	rsync -a --delete "$ROOT_DIR/.claude/skills/$skill/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
 done
+
+if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
+	copy_guidelines_to_global
+fi
 
 echo "Promotion complete: repo -> global"

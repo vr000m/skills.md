@@ -89,4 +89,4 @@ Executed after tool install:
 
 ## Final Results
 
-Implemented a full sync workflow with explicit authority rules, promotion guardrails, managed-scope allowlisting, and drift detection. The repo is on branch `chore/skills-sync-workflow`, and the process is documented for daily use, exception handling, and new-machine bootstrap.
+Implemented a full sync workflow with explicit authority rules, promotion guardrails, managed-scope allowlisting, and drift detection. Follow-up review fixes made `bootstrap` non-destructive by default (with `--force` for overwrite), ensured `promote`/`bootstrap` both refresh authoritative content guidelines, and reduced remote guideline fetches in drift checks. The repo is on branch `chore/skills-sync-workflow`, and the process is documented for daily use, exception handling, and new-machine bootstrap.
