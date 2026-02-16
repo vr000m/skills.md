@@ -115,4 +115,4 @@ After presenting the draft, offer:
 - Present the session summary for user confirmation before drafting — don't assume context is complete.
 - Always produce `status: 'draft'` in frontmatter. The user publishes when ready.
 - Never write to files without explicit permission.
-- When working in the varunsingh.net repo, the project's `.claude/content-guidelines.md` provides additional context. Outside that repo, the style rules embedded above are sufficient.
+- When working in the varunsingh.net repo, use the project's content guidelines file (currently `.claude/content-guidelines.md`) for additional context. Outside that repo, the style rules embedded above are sufficient.
