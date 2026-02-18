@@ -22,6 +22,7 @@ Default authority is global skills, not this repo.
 
 - Global Codex authority: `~/.codex/skills`
 - Global Claude authority: `~/.claude/skills`
+- Global CLAUDE.md: `~/.claude/CLAUDE.md` (synced bidirectionally to `.claude/CLAUDE.md`)
 - Managed scope: only skills in `MANAGED_SKILLS` are synced/checked/promoted/bootstrapped
 - Content guidelines authority (in priority order):
   1. `CONTENT_GUIDELINES_LOCAL` from `.env` (if file exists)
@@ -37,8 +38,9 @@ Default authority is global skills, not this repo.
 - Validation: run `just check-sync`
 
 Notes:
+- All commands sync `~/.claude/CLAUDE.md` alongside managed skills.
 - `promote-skills` and `bootstrap-skills` refresh global `content-guidelines.md` when `content-review` is in `MANAGED_SKILLS`.
-- `bootstrap-skills` is non-destructive unless `--force` is provided.
+- `bootstrap-skills` is non-destructive unless `--force` is provided (applies to both skills and CLAUDE.md).
 - If local/remote authoritative guidelines are unavailable, scripts fall back to the repo `content-guidelines.md` copy and print a warning.
 
 ## Conflict Policy
