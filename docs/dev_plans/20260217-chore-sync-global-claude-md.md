@@ -31,22 +31,22 @@ The sync system currently handles skills directories (`~/.claude/skills/`, `~/.c
 
 ### Phase 1: Config & Sync Scripts
 
-- [ ] Add `GLOBAL_CLAUDE_MD` to `.env.example`
-- [ ] Add `GLOBAL_CLAUDE_MD` variable to all 4 scripts
-- [ ] Update `sync-skills.sh`: copy global CLAUDE.md -> `.claude/CLAUDE.md`
-- [ ] Update `promote-skills.sh`: copy `.claude/CLAUDE.md` -> global
-- [ ] Update `bootstrap-skills.sh`: install `.claude/CLAUDE.md` -> global (respecting --force)
-- [ ] Update `check-sync.sh`: diff global vs repo CLAUDE.md
+- [x] Add `GLOBAL_CLAUDE_MD` to `.env.example`
+- [x] Add `GLOBAL_CLAUDE_MD` variable to all 4 scripts
+- [x] Update `sync-skills.sh`: copy global CLAUDE.md -> `.claude/CLAUDE.md`
+- [x] Update `promote-skills.sh`: copy `.claude/CLAUDE.md` -> global
+- [x] Update `bootstrap-skills.sh`: install `.claude/CLAUDE.md` -> global (respecting --force)
+- [x] Update `check-sync.sh`: diff global vs repo CLAUDE.md
 
 ### Phase 2: Docs
 
-- [ ] Update `README.md` authority model section
-- [ ] Update `docs/dev_plans/README.md` task table
+- [x] Update `README.md` authority model section
+- [x] Update `docs/dev_plans/README.md` task table
 
 ### Phase 3: Validate
 
-- [ ] Run `just lint-scripts`
-- [ ] Run `just check-sync` (expect pass after initial sync)
+- [x] Run `just lint-scripts`
+- [x] Run `just check-sync` (expect pass after initial sync)
 
 ## Technical Specifications
 
@@ -81,13 +81,13 @@ The existing `.claude/skills/CLAUDE.md` is a skills-scoped subset of preferences
 
 ## Acceptance Criteria
 
-- [ ] `just sync-skills` copies `~/.claude/CLAUDE.md` into `.claude/CLAUDE.md`
-- [ ] `just promote-skills` copies `.claude/CLAUDE.md` to `~/.claude/CLAUDE.md`
-- [ ] `just bootstrap-skills` installs CLAUDE.md only if missing (skips if exists)
-- [ ] `just bootstrap-skills-force` overwrites CLAUDE.md
-- [ ] `just check-sync` detects drift between global and repo CLAUDE.md
-- [ ] `just lint-scripts` passes
-- [ ] README documents the new sync target
+- [x] `just sync-skills` copies `~/.claude/CLAUDE.md` into `.claude/CLAUDE.md`
+- [x] `just promote-skills` copies `.claude/CLAUDE.md` to `~/.claude/CLAUDE.md`
+- [x] `just bootstrap-skills` installs CLAUDE.md only if missing (skips if exists)
+- [x] `just bootstrap-skills-force` overwrites CLAUDE.md
+- [x] `just check-sync` detects drift between global and repo CLAUDE.md
+- [x] `just lint-scripts` passes
+- [x] README documents the new sync target
 
 ## Final Results
 
