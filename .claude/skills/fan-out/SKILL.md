@@ -99,6 +99,14 @@ Then for each task:
    - `{{BRANCH_NAME}}` — Git branch for this agent
    - `{{BASE_BRANCH}}` — The base branch
    - `{{CLAUDE_MD_CONTENT}}` — Contents of `CLAUDE.md` and `AGENTS.md` if they exist
+   - `{{TOOLCHAIN_CONTEXT}}` — Contents of the appropriate `toolchains/<language>.md` file.
+     Detect the language from the project:
+     - `pyproject.toml` or `setup.py` → `toolchains/python.md`
+     - `package.json` → `toolchains/typescript.md` (or `node.md`)
+     - `Cargo.toml` → `toolchains/rust.md`
+     - `go.mod` → `toolchains/go.md`
+     - If no toolchain file exists for the detected language, omit this section and
+       let the agent infer setup/test commands from project config files.
 
    Write the filled prompt to a temp file in the worktree.
 
