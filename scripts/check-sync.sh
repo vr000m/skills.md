@@ -13,6 +13,7 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 CODEX_DIFF=0
 CLAUDE_DIFF=0
@@ -57,7 +58,22 @@ if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	fi
 fi
 
-if [[ "$CODEX_DIFF" -eq 1 || "$CLAUDE_DIFF" -eq 1 || "$GUIDE_DIFF" -eq 1 ]]; then
+CLAUDE_MD_DIFF=0
+REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"
+if [[ -f "$GLOBAL_CLAUDE_MD" && -f "$REPO_CLAUDE_MD" ]]; then
+	if ! cmp -s "$GLOBAL_CLAUDE_MD" "$REPO_CLAUDE_MD"; then
+		echo "drift: CLAUDE.md differs between global and repo"
+		CLAUDE_MD_DIFF=1
+	fi
+elif [[ -f "$GLOBAL_CLAUDE_MD" && ! -f "$REPO_CLAUDE_MD" ]]; then
+	echo "drift: CLAUDE.md exists globally but not in repo (run just sync-skills)"
+	CLAUDE_MD_DIFF=1
+elif [[ ! -f "$GLOBAL_CLAUDE_MD" && -f "$REPO_CLAUDE_MD" ]]; then
+	echo "drift: CLAUDE.md exists in repo but not globally (run just promote-skills)"
+	CLAUDE_MD_DIFF=1
+fi
+
+if [[ "$CODEX_DIFF" -eq 1 || "$CLAUDE_DIFF" -eq 1 || "$GUIDE_DIFF" -eq 1 || "$CLAUDE_MD_DIFF" -eq 1 ]]; then
 	echo "check-sync failed"
 	exit 1
 fi

@@ -13,6 +13,7 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 confirmed=0
 force_overwrite=0
@@ -95,6 +96,19 @@ done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	copy_guidelines_to_global
+fi
+
+REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"
+if [[ -f "$REPO_CLAUDE_MD" ]]; then
+	mkdir -p "$(dirname "$GLOBAL_CLAUDE_MD")"
+	if [[ "$force_overwrite" -eq 0 && -f "$GLOBAL_CLAUDE_MD" ]]; then
+		echo "skip: $GLOBAL_CLAUDE_MD already exists (use --force to overwrite)"
+	else
+		cp "$REPO_CLAUDE_MD" "$GLOBAL_CLAUDE_MD"
+		echo "Installed CLAUDE.md: $REPO_CLAUDE_MD -> $GLOBAL_CLAUDE_MD"
+	fi
+else
+	echo "warn: repo CLAUDE.md not found at $REPO_CLAUDE_MD, skipping" >&2
 fi
 
 echo "Bootstrap complete: repo -> global (non-destructive by default)"

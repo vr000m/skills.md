@@ -13,9 +13,11 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 REPO_CODEX_DIR="$ROOT_DIR/.codex/skills"
 REPO_CLAUDE_DIR="$ROOT_DIR/.claude/skills"
+REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"
 
 require_dir() {
 	local path="$1"
@@ -79,6 +81,13 @@ done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	copy_guidelines
+fi
+
+if [[ -f "$GLOBAL_CLAUDE_MD" ]]; then
+	cp "$GLOBAL_CLAUDE_MD" "$REPO_CLAUDE_MD"
+	echo "Synced CLAUDE.md: $GLOBAL_CLAUDE_MD -> $REPO_CLAUDE_MD"
+else
+	echo "warn: global CLAUDE.md not found at $GLOBAL_CLAUDE_MD, skipping" >&2
 fi
 
 echo "Sync complete: global -> repo"
