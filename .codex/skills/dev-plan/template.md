@@ -63,6 +63,18 @@ Use this template when creating new development plans.
 ### Dependencies
 - [Any new dependencies or integrations]
 
+### Integration Seams
+
+Cross-component boundaries where one task's output feeds into another's input.
+Fill this in before using `/fan-out` — it tells each agent what contracts to honor
+and tells the merge phase what to verify.
+
+| Seam | Writer (task) | Caller (task) | Contract |
+|------|---------------|---------------|----------|
+| [e.g., cleanup on refresh] | [IndexStore] | [cli.py] | [Must delete stale records before upsert] |
+
+For each seam, consider: who calls it, resource lifecycle (open/close), error paths, and idempotency.
+
 ## Testing Notes
 
 ### Test Approach

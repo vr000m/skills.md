@@ -49,6 +49,8 @@ For each task, determine which files it likely touches (from Technical Specifica
 - **Potentially conflicting**: Modify the same files
 - **Sequential**: One depends on output of another
 
+If the plan has an **Integration Seams** table, include those seams in the analysis. If it doesn't, infer seams from the task descriptions (any case where one task produces an interface, method, or resource that another task consumes).
+
 Present the analysis to the user:
 
 ```
@@ -64,6 +66,10 @@ Potentially conflicting (should run sequentially):
 
 Sequential (must run after others):
   [5] Integration tests          (depends on 1-3)
+
+Integration seams (verify after merge):
+  - Task 1 writes UserService.create() / Task 3 calls it from tests
+  - Task 2 adds migration / Task 1 assumes schema exists at runtime
 
 Fan out tasks [1], [2], [3] in parallel? (y/n/edit)
 ```
@@ -194,6 +200,13 @@ git merge --no-ff <task-branch> -m "Merge fan-out task: <name>"
 - Stop and report if merge conflicts arise
 - Never squash (per global `AGENTS.md` preferences)
 
+**After all branches are merged**, verify integration seams:
+1. Read each agent's `.fan-out-result.md` **Integration Seams** section.
+2. For every method one agent wrote that another agent (or orchestration code) must call, confirm the call site exists and the contract is honored (arguments, error handling, cleanup).
+3. Look for dead code at boundaries — methods that were written but never wired into the calling code.
+4. Check resource lifecycle — every open/connect/init should have a corresponding close/cleanup.
+5. Run the full test suite once more after all merges. Individual agents tested in isolation; this run catches integration failures.
+
 For option 2 (PRs):
 ```bash
 gh pr create --base <base-branch> --head <task-branch> \
@@ -234,6 +247,22 @@ tail -100 <worktree>/fan-out.log
 - **Max agents**: 5 (override with `--max-agents 3`)
 - **Worktree location**: `../<repo-name>-fanout-<slug>` (sibling to repo)
 - **Branch naming**: `fanout/<base-slug>-<task-slug>`
+
+## Integration Seams
+
+An **integration seam** is any boundary where one agent's output feeds into another's input — a method signature, a shared resource, a data contract. Agents test in isolation, so these seams are where bugs hide.
+
+Common patterns to watch for:
+- A method exists but the calling code never invokes it (dead code at the boundary)
+- A protocol or interface is only partially satisfied by the implementer
+- Resources (connections, file handles) are opened but never closed by orchestration
+- Error/cleanup paths that one agent assumed another would handle
+- Idempotency violations when operations run more than once
+
+Integration seams are surfaced at three points in the workflow:
+1. **Dependency analysis** — identified from the plan and listed alongside file conflicts
+2. **Agent self-review** — each agent flags seams in its result file
+3. **Post-merge verification** — the orchestrator audits all seams after merging
 
 ## Recommended Codex CLI Config
 
