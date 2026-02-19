@@ -83,10 +83,12 @@ cmd_spawn() {
   fi
 
   # Launch claude in the worktree directory.
+  # Unset CLAUDECODE to allow spawning from within a Claude Code session.
   # exec replaces the subshell so $! is the claude process PID (not a wrapper),
   # which lets cancel verify the process identity before sending SIGTERM.
   (
     cd "$worktree_path"
+    unset CLAUDECODE
     exec claude -p "$(cat "$prompt_file")" \
       --dangerously-skip-permissions \
       --model "$model" \

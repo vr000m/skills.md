@@ -83,6 +83,10 @@ After all checks pass, critically review your own code. Check for:
 - **Security issues** — command injection, path traversal, unvalidated input.
 - **Code quality** — dead code, unused imports, unclear naming, missing error handling
   at boundaries.
+- **Integration seams** — your code will be merged with other agents' work. Flag any
+  methods you wrote that must be called by orchestration code (e.g., `close()`,
+  `cleanup()`, `delete()`). Flag any assumptions about call order, resource lifecycle,
+  or error handling that the integration phase must honor.
 - **Toolchain-specific pitfalls** — review the Known Pitfalls in the Toolchain section.
 
 Write down every issue you find.
@@ -132,6 +136,11 @@ ALL checks must pass with zero errors. If anything fails, go back to Phase 4.
    ## Self-Review Findings
    - [issues found during Phase 3, and how each was resolved]
    - [or "No issues found" if clean on first pass]
+
+   ## Integration Seams
+   - [methods you wrote that MUST be called by orchestration code, e.g. close(), cleanup(), delete()]
+   - [assumptions about call order or resource lifecycle the integration phase must honor]
+   - [or "None — no cross-component dependencies"]
 
    ## Remaining Concerns
    - [anything the integration phase should watch for]
