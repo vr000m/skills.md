@@ -83,7 +83,9 @@ After all checks pass, critically review your own code. Check for:
 - **Security issues** — command injection, path traversal, unvalidated input.
 - **Code quality** — dead code, unused imports, unclear naming, missing error handling
   at boundaries.
-- **Integration seams** — your code will be merged with other agents' work. Flag any
+- **Integration seams** — your code will be merged with other agents' work.
+  Re-read the Integration Seams table in your Technical Context and verify your
+  implementation honors every seam you are listed as the Writer for. Flag any
   methods you wrote that must be called by orchestration code (e.g., `close()`,
   `cleanup()`, `delete()`). Flag any assumptions about call order, resource lifecycle,
   or error handling that the integration phase must honor.
