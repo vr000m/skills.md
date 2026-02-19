@@ -49,7 +49,7 @@ For each task, determine which files it likely touches (from Technical Specifica
 - **Potentially conflicting**: Modify the same files
 - **Sequential**: One depends on output of another
 
-If the plan has an **Integration Seams** table, include those seams in the analysis. If it doesn't, infer seams from the task descriptions (any case where one task produces an interface, method, or resource that another task consumes).
+If the plan has an **Integration Seams** table, include those seams in the analysis. If it doesn't, warn the user that the table is missing, infer seams from the task descriptions (any case where one task produces an interface, method, or resource that another task consumes), and recommend filling the table in the dev plan before proceeding.
 
 Present the analysis to the user:
 
@@ -95,7 +95,7 @@ Then for each task:
    ```
    Always prefix the slug with the task ID (e.g., `"1-add-api-endpoint"`, `"2-add-migration"`) to prevent collisions when different tasks slugify to the same string.
 
-   This creates branch `fanout/<base-slug>-<id>-<task-slug>` and worktree at `../<repo>-fanout-<id>-<slug>`.
+   This creates branch `fanout/<base-slug>-<slug>` and worktree at `../<repo>-fanout-<slug>`, where `<slug>` is the `<task-id>-<task-slug>` string passed by the caller.
 
 2. **Build agent prompt**: Read the template from `agent-prompt.md` in this skill directory. Replace placeholders:
    - `{{TASK_DESCRIPTION}}` — Full task text from the plan
