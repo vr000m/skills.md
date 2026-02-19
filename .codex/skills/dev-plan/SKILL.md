@@ -58,7 +58,7 @@ Every plan must include these sections (see template.md for full format):
 2. **Context** - Background, why this work is needed
 3. **Requirements** - Specific requirements and constraints
 4. **Implementation Checklist** - Phased breakdown with checkboxes
-5. **Technical Specifications** - Files to modify, interfaces, architecture decisions
+5. **Technical Specifications** - Files to modify, interfaces, architecture decisions, integration seams
 6. **Testing Notes** - Test approach and results
 7. **Issues & Solutions** - Problems encountered and how resolved
 8. **Acceptance Criteria** - Definition of done (checkboxes)
@@ -77,6 +77,7 @@ Every plan must include these sections (see template.md for full format):
 2. Document issues immediately when encountered
 3. Update technical specifications if approach changes
 4. Add testing results as validation is performed
+5. When using `/fan-out`, fill in the **Integration Seams** table before fanning out — it tells agents what contracts to honor and tells the merge phase what to verify
 
 ### Post-Implementation
 1. Mark status as Complete

@@ -118,10 +118,12 @@ cmd_spawn() {
   fi
 
   # Launch codex in the worktree directory.
+  # Unset Codex session markers so child agents run as independent sessions.
   # exec replaces the subshell so $! is the codex process PID (not a wrapper),
   # which lets cancel verify the process identity before sending SIGTERM.
   (
     cd "$worktree_path"
+    unset CODEX_SHELL CODEX_THREAD_ID CODEX_INTERNAL_ORIGINATOR_OVERRIDE
     exec "${cmd_args[@]}" > "$log_file" 2>&1
   ) &
 
