@@ -26,11 +26,18 @@ Run this after finishing implementation work on a feature branch, before creatin
 
 1. **Detect the base branch and diff:**
    ```
-   # Detect base branch
+   # Detect base branch from origin/HEAD first
    BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
-   # Fallback: check if main or master exists
+   # Fallback: local main/master if present
    if [ -z "$BASE" ]; then
-     git show-ref --verify --quiet refs/heads/main && BASE=main || BASE=master
+     if git show-ref --verify --quiet refs/heads/main; then
+       BASE=main
+     elif git show-ref --verify --quiet refs/heads/master; then
+       BASE=master
+     else
+       # Last resort: first local branch name
+       BASE=$(git for-each-ref --format='%(refname:short)' refs/heads | head -n 1)
+     fi
    fi
 
    CURRENT=$(git branch --show-current)
@@ -38,17 +45,18 @@ Run this after finishing implementation work on a feature branch, before creatin
 
    **If on a feature branch** (CURRENT != BASE):
    ```
-   git log --oneline --no-merges $BASE...HEAD
-   git diff $BASE...HEAD --stat
-   git diff $BASE...HEAD
+   MERGE_BASE=$(git merge-base "$BASE" HEAD)
+   git log --oneline --no-merges "$MERGE_BASE..HEAD"
+   git diff "$MERGE_BASE..HEAD" --stat
+   git diff "$MERGE_BASE..HEAD"
    ```
-   If the branch has no commits ahead of base, stop early: "Nothing to document — branch is up to date with {base}."
+   If `git rev-list --count "$MERGE_BASE..HEAD"` is `0`, stop early: "Nothing to document — branch is up to date with {base}."
 
    **If on the base branch itself** (CURRENT == BASE):
    Use the most recent commits since the last doc-touching commit as the diff range:
    ```
    # Find last commit that touched docs
-   LAST_DOC_COMMIT=$(git log --oneline --diff-filter=M -- '*.md' -1 --format='%H')
+   LAST_DOC_COMMIT=$(git log --diff-filter=AMR --format='%H' -1 -- '*.md' 'docs/**')
    # If no doc commits exist, use the last 5 commits
    RANGE="${LAST_DOC_COMMIT:-HEAD~5}..HEAD"
    git log --oneline --no-merges $RANGE
@@ -116,12 +124,20 @@ Check:
 - [ ] **New commands** — if the diff adds CLI commands, build steps, or dev workflow commands, are they documented?
 - [ ] **Project layout** — if new directories or key files were added, is the layout tree updated?
 - [ ] **Tool/API changes** — if new tools, endpoints, or public interfaces were added, are they listed?
+- [ ] **Skill triggers and routing** — if skills were added/renamed/removed, does `AGENTS.md` reflect accurate trigger rules and skill paths?
+- [ ] **Codex instruction sections** — if execution norms changed, are sections like editing constraints, formatting rules, and collaboration mode still accurate?
+- [ ] **Tooling assumptions** — if commands were changed (e.g., `rg` vs alternatives, test/lint commands), does `AGENTS.md` still describe the preferred tools and fallbacks?
+- [ ] **Cross-agent consistency** — if both `AGENTS.md` and `CLAUDE.md` exist, do shared command examples and project-layout statements agree?
 
 ### PR Description
 
 Only checked if `--pr NUMBER` is provided or the branch has an open PR. Detect via:
 ```
 PR_NUMBER=$(gh pr view --json number -q .number 2>/dev/null)
+```
+Graceful fallback if empty:
+```
+PR_NUMBER=$(gh pr list --head "$(git branch --show-current)" --json number,isDraft -q '.[0].number' 2>/dev/null)
 ```
 If `gh` is not installed or not authenticated, skip PR checks and note it in the report.
 
@@ -203,3 +219,4 @@ docs: sync documentation with $(git branch --show-current) changes
 - **Merge commits**: Use `git log --no-merges` to focus on actual work commits.
 - **Draft PR**: Still audit the PR description — drafts need docs too.
 - **On main/master directly**: Still useful — audits recent commits for doc staleness. Uses the range since the last doc-touching commit as the comparison window.
+- **Committing on base branch**: If there are direct commits on `main`/`master`, avoid broad history rewrites; only propose doc updates for the computed audit range.
