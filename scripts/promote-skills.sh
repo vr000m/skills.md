@@ -13,6 +13,7 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 if [[ "${1:-}" != "--yes" ]]; then
@@ -77,6 +78,15 @@ if [[ -f "$REPO_CLAUDE_MD" ]]; then
 	echo "Promoted CLAUDE.md: $REPO_CLAUDE_MD -> $GLOBAL_CLAUDE_MD"
 else
 	echo "warn: repo CLAUDE.md not found at $REPO_CLAUDE_MD, skipping" >&2
+fi
+
+REPO_CODEX_AGENTS="$ROOT_DIR/.codex/AGENTS.md"
+if [[ -f "$REPO_CODEX_AGENTS" ]]; then
+	mkdir -p "$(dirname "$GLOBAL_CODEX_AGENTS")"
+	cp "$REPO_CODEX_AGENTS" "$GLOBAL_CODEX_AGENTS"
+	echo "Promoted AGENTS.md: $REPO_CODEX_AGENTS -> $GLOBAL_CODEX_AGENTS"
+else
+	echo "warn: repo AGENTS.md not found at $REPO_CODEX_AGENTS, skipping" >&2
 fi
 
 echo "Promotion complete: repo -> global"

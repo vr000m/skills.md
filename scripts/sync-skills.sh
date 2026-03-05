@@ -13,11 +13,13 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 REPO_CODEX_DIR="$ROOT_DIR/.codex/skills"
 REPO_CLAUDE_DIR="$ROOT_DIR/.claude/skills"
 REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"
+REPO_CODEX_AGENTS="$ROOT_DIR/.codex/AGENTS.md"
 
 require_dir() {
 	local path="$1"
@@ -88,6 +90,15 @@ if [[ -f "$GLOBAL_CLAUDE_MD" ]]; then
 	echo "Synced CLAUDE.md: $GLOBAL_CLAUDE_MD -> $REPO_CLAUDE_MD"
 else
 	echo "warn: global CLAUDE.md not found at $GLOBAL_CLAUDE_MD, skipping" >&2
+fi
+
+if [[ -f "$GLOBAL_CODEX_AGENTS" ]]; then
+	cp "$GLOBAL_CODEX_AGENTS" "$REPO_CODEX_AGENTS"
+	echo "Synced AGENTS.md: $GLOBAL_CODEX_AGENTS -> $REPO_CODEX_AGENTS"
+else
+	if [[ -f "$REPO_CODEX_AGENTS" ]]; then
+		echo "warn: global AGENTS.md not found at $GLOBAL_CODEX_AGENTS, skipping" >&2
+	fi
 fi
 
 echo "Sync complete: global -> repo"

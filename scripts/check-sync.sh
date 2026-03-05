@@ -13,6 +13,7 @@ GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 CODEX_DIFF=0
@@ -73,7 +74,22 @@ elif [[ ! -f "$GLOBAL_CLAUDE_MD" && -f "$REPO_CLAUDE_MD" ]]; then
 	CLAUDE_MD_DIFF=1
 fi
 
-if [[ "$CODEX_DIFF" -eq 1 || "$CLAUDE_DIFF" -eq 1 || "$GUIDE_DIFF" -eq 1 || "$CLAUDE_MD_DIFF" -eq 1 ]]; then
+CODEX_AGENTS_DIFF=0
+REPO_CODEX_AGENTS="$ROOT_DIR/.codex/AGENTS.md"
+if [[ -f "$GLOBAL_CODEX_AGENTS" && -f "$REPO_CODEX_AGENTS" ]]; then
+	if ! cmp -s "$GLOBAL_CODEX_AGENTS" "$REPO_CODEX_AGENTS"; then
+		echo "drift: AGENTS.md differs between global and repo"
+		CODEX_AGENTS_DIFF=1
+	fi
+elif [[ -f "$GLOBAL_CODEX_AGENTS" && ! -f "$REPO_CODEX_AGENTS" ]]; then
+	echo "drift: AGENTS.md exists globally but not in repo (run just sync-skills)"
+	CODEX_AGENTS_DIFF=1
+elif [[ ! -f "$GLOBAL_CODEX_AGENTS" && -f "$REPO_CODEX_AGENTS" ]]; then
+	echo "drift: AGENTS.md exists in repo but not globally (run just promote-skills)"
+	CODEX_AGENTS_DIFF=1
+fi
+
+if [[ "$CODEX_DIFF" -eq 1 || "$CLAUDE_DIFF" -eq 1 || "$GUIDE_DIFF" -eq 1 || "$CLAUDE_MD_DIFF" -eq 1 || "$CODEX_AGENTS_DIFF" -eq 1 ]]; then
 	echo "check-sync failed"
 	exit 1
 fi
