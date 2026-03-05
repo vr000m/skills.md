@@ -15,6 +15,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 | fan-out | Yes | Yes | Parallel agent orchestration via worktrees |
 | content-draft | Yes | Yes | Draft content following style guidelines |
 | content-review | Yes | Yes | Review content against style guidelines |
+| update-docs | Yes | Yes | Audit and update stale docs against branch diffs |
 
 ## Authority Model
 
@@ -74,7 +75,7 @@ CONTENT_GUIDELINES_LOCAL="/Users/vr000m/Code/vr000m/varunsingh.net/.claude/conte
 4. (Optional) restrict managed skills:
 
 ```bash
-MANAGED_SKILLS="content-draft content-review dev-plan fan-out"
+MANAGED_SKILLS="content-draft content-review dev-plan fan-out update-docs"
 ```
 
 ## Commands
