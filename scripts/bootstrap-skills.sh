@@ -10,9 +10,10 @@ fi
 
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
-MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out}"
+MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
 CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
 CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
+GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
 confirmed=0
@@ -109,6 +110,19 @@ if [[ -f "$REPO_CLAUDE_MD" ]]; then
 	fi
 else
 	echo "warn: repo CLAUDE.md not found at $REPO_CLAUDE_MD, skipping" >&2
+fi
+
+REPO_CODEX_AGENTS="$ROOT_DIR/.codex/AGENTS.md"
+if [[ -f "$REPO_CODEX_AGENTS" ]]; then
+	mkdir -p "$(dirname "$GLOBAL_CODEX_AGENTS")"
+	if [[ "$force_overwrite" -eq 0 && -f "$GLOBAL_CODEX_AGENTS" ]]; then
+		echo "skip: $GLOBAL_CODEX_AGENTS already exists (use --force to overwrite)"
+	else
+		cp "$REPO_CODEX_AGENTS" "$GLOBAL_CODEX_AGENTS"
+		echo "Installed AGENTS.md: $REPO_CODEX_AGENTS -> $GLOBAL_CODEX_AGENTS"
+	fi
+else
+	echo "warn: repo AGENTS.md not found at $REPO_CODEX_AGENTS, skipping" >&2
 fi
 
 echo "Bootstrap complete: repo -> global (non-destructive by default)"
