@@ -94,6 +94,7 @@ Check:
 - [ ] **Unchecked boxes** — are there checklist items that the diff shows are now done?
 - [ ] **Missing items** — did the implementation add work not in the plan? (new files, phases, or decisions)
 - [ ] **Stale references** — do file paths, method names, or config keys in the plan match the code?
+- [ ] **Stale descriptions** — do technical-spec tables, authority decisions, and prose summaries still accurately describe what each file does in the current diff? Re-read each row/statement against the actual code, not just the path.
 
 ### Changelog (`CHANGELOG.md`)
 

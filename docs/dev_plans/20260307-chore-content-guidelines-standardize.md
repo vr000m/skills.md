@@ -155,6 +155,11 @@ Executed:
 - [x] `check-sync.sh` explicitly requires `content-guidelines.md` and `writing-style-rules.md` via `REQUIRED_REFERENCE_FILES` array
 - [x] `AGENTS.md` gotcha updated: `.env` is optional, not required
 
+### Phase 8: update-docs Skill Improvement
+
+- [x] Add "Stale descriptions" check to dev plan audit in `.claude/skills/update-docs/SKILL.md`
+- [x] Mirror the same change to `.codex/skills/update-docs/SKILL.md`
+
 ## Final Results
 
 This repo now owns the content-guideline authority. The draft and review skills both enforce anti-LLM authenticity constraints, the sync tooling mirrors the canonical guideline file outward instead of pulling it in from elsewhere, and the updated skill copies have already been promoted to the global Codex and Claude skill folders.
