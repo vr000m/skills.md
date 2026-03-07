@@ -64,6 +64,6 @@ Treat conflicts as policy decisions, not merge-resolution tasks.
 ## Gotchas
 
 - **Don't edit `.claude/CLAUDE.md` or `.codex/AGENTS.md` directly** -- they get overwritten by `sync-skills`. Edit the global files instead, then sync.
-- Content guidelines priority: `.env` local path > remote URL > repo fallback
+- Content guidelines are repo-canonical at `.codex/skills/content-review/references/content-guidelines.md`, mirrored to `.claude/skills/content-review/references/content-guidelines.md` and the global skill folders
 - `bootstrap-skills` is non-destructive by default; use `--force` to overwrite
 - Scripts expect `.env` to exist (copy from `.env.example`)

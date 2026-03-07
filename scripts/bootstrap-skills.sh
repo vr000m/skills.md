@@ -40,13 +40,12 @@ read -r -a managed_skills <<<"$MANAGED_SKILLS"
 
 copy_guidelines_to_global() {
 	local repo_guidelines_code="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
-	local repo_guidelines_claude="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
 	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
 	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
 
 	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
 	cp "$repo_guidelines_code" "$global_guidelines_code"
-	cp "$repo_guidelines_claude" "$global_guidelines_claude"
+	cp "$repo_guidelines_code" "$global_guidelines_claude"
 	echo "Copied canonical repo content-guidelines.md to global skill directories"
 }
 

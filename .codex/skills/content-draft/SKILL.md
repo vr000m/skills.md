@@ -136,4 +136,4 @@ After presenting the draft, offer:
 - Present the session summary for user confirmation before drafting — don't assume context is complete.
 - Always produce `status: 'draft'` in frontmatter. The user publishes when ready.
 - Never write to files without explicit permission.
-- Use the local skill reference file `content-review/references/content-guidelines.md` as the canonical extended guideline set. Do not fetch guidance from external repos during drafting.
+- Use the local skill reference file `content-review/references/content-guidelines.md` as the canonical extended guideline set, including the full anti-LLM rule set. Do not fetch guidance from external repos during drafting.
