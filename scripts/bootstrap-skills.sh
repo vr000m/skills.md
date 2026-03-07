@@ -38,15 +38,15 @@ fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 
-copy_guidelines_to_global() {
-	local repo_guidelines_code="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
-	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
-	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+copy_reference_files_to_global() {
+	local repo_references_code="$ROOT_DIR/.codex/skills/content-review/references"
+	local global_references_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references"
+	local global_references_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
 
-	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
-	cp "$repo_guidelines_code" "$global_guidelines_code"
-	cp "$repo_guidelines_code" "$global_guidelines_claude"
-	echo "Copied canonical repo content-guidelines.md to global skill directories"
+	mkdir -p "$global_references_code" "$global_references_claude"
+	rsync -a --delete "$repo_references_code/" "$global_references_code/"
+	rsync -a --delete "$repo_references_code/" "$global_references_claude/"
+	echo "Copied canonical repo content-review reference files to global skill directories"
 }
 
 mkdir -p "$GLOBAL_CODEX_SKILLS_DIR" "$GLOBAL_CLAUDE_SKILLS_DIR"
@@ -67,7 +67,7 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	copy_guidelines_to_global
+	copy_reference_files_to_global
 fi
 
 REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"

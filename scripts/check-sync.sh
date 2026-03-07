@@ -32,45 +32,56 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	CANONICAL_GUIDELINES="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
-	REPO_CLAUDE_GUIDELINES="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
-	GLOBAL_CODEX_GUIDELINES="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
-	GLOBAL_CLAUDE_GUIDELINES="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+	CANONICAL_REFERENCES_DIR="$ROOT_DIR/.codex/skills/content-review/references"
+	REPO_CLAUDE_REFERENCES_DIR="$ROOT_DIR/.claude/skills/content-review/references"
+	GLOBAL_CODEX_REFERENCES_DIR="$GLOBAL_CODEX_SKILLS_DIR/content-review/references"
+	GLOBAL_CLAUDE_REFERENCES_DIR="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
 
-	if [[ ! -f "$CANONICAL_GUIDELINES" ]]; then
-		echo "drift: missing canonical repo content-guidelines.md at $CANONICAL_GUIDELINES"
+	if [[ ! -d "$CANONICAL_REFERENCES_DIR" ]]; then
+		echo "drift: missing canonical repo content-review references dir at $CANONICAL_REFERENCES_DIR"
 		GUIDE_DIFF=1
 	fi
 
-	if [[ ! -f "$REPO_CLAUDE_GUIDELINES" ]]; then
-		echo "drift: missing repo claude content-guidelines.md at $REPO_CLAUDE_GUIDELINES"
-		GUIDE_DIFF=1
-	fi
+	for canonical_file in "$CANONICAL_REFERENCES_DIR"/*; do
+		if [[ ! -f "$canonical_file" ]]; then
+			continue
+		fi
 
-	if [[ ! -f "$GLOBAL_CODEX_GUIDELINES" ]]; then
-		echo "drift: missing global codex content-guidelines.md at $GLOBAL_CODEX_GUIDELINES"
-		GUIDE_DIFF=1
-	fi
+		reference_name="$(basename "$canonical_file")"
+		repo_claude_file="$REPO_CLAUDE_REFERENCES_DIR/$reference_name"
+		global_codex_file="$GLOBAL_CODEX_REFERENCES_DIR/$reference_name"
+		global_claude_file="$GLOBAL_CLAUDE_REFERENCES_DIR/$reference_name"
 
-	if [[ ! -f "$GLOBAL_CLAUDE_GUIDELINES" ]]; then
-		echo "drift: missing global claude content-guidelines.md at $GLOBAL_CLAUDE_GUIDELINES"
-		GUIDE_DIFF=1
-	fi
+		if [[ ! -f "$repo_claude_file" ]]; then
+			echo "drift: missing repo claude $reference_name at $repo_claude_file"
+			GUIDE_DIFF=1
+		fi
 
-	if [[ -f "$CANONICAL_GUIDELINES" && -f "$REPO_CLAUDE_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$REPO_CLAUDE_GUIDELINES"; then
-		echo "drift: repo claude content-guidelines.md differs from repo canonical copy"
-		GUIDE_DIFF=1
-	fi
+		if [[ ! -f "$global_codex_file" ]]; then
+			echo "drift: missing global codex $reference_name at $global_codex_file"
+			GUIDE_DIFF=1
+		fi
 
-	if [[ -f "$CANONICAL_GUIDELINES" && -f "$GLOBAL_CODEX_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$GLOBAL_CODEX_GUIDELINES"; then
-		echo "drift: global codex content-guidelines.md differs from repo canonical copy"
-		GUIDE_DIFF=1
-	fi
+		if [[ ! -f "$global_claude_file" ]]; then
+			echo "drift: missing global claude $reference_name at $global_claude_file"
+			GUIDE_DIFF=1
+		fi
 
-	if [[ -f "$CANONICAL_GUIDELINES" && -f "$GLOBAL_CLAUDE_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$GLOBAL_CLAUDE_GUIDELINES"; then
-		echo "drift: global claude content-guidelines.md differs from repo canonical copy"
-		GUIDE_DIFF=1
-	fi
+		if [[ -f "$repo_claude_file" ]] && ! cmp -s "$canonical_file" "$repo_claude_file"; then
+			echo "drift: repo claude $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ -f "$global_codex_file" ]] && ! cmp -s "$canonical_file" "$global_codex_file"; then
+			echo "drift: global codex $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ -f "$global_claude_file" ]] && ! cmp -s "$canonical_file" "$global_claude_file"; then
+			echo "drift: global claude $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+	done
 fi
 
 CLAUDE_MD_DIFF=0

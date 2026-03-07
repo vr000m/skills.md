@@ -28,17 +28,18 @@ require_dir() {
 	fi
 }
 
-sync_repo_guidelines_copies() {
-	local repo_guidelines_code="$REPO_CODEX_DIR/content-review/references/content-guidelines.md"
-	local repo_guidelines_claude="$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
+sync_repo_reference_copies() {
+	local repo_references_code="$REPO_CODEX_DIR/content-review/references"
+	local repo_references_claude="$REPO_CLAUDE_DIR/content-review/references"
 
-	if [[ ! -f "$repo_guidelines_code" ]]; then
-		echo "error: missing canonical content-guidelines.md at $repo_guidelines_code" >&2
+	if [[ ! -d "$repo_references_code" ]]; then
+		echo "error: missing canonical content-review references dir at $repo_references_code" >&2
 		exit 1
 	fi
 
-	cp "$repo_guidelines_code" "$repo_guidelines_claude"
-	echo "Restored repo content-guidelines.md copies from canonical source"
+	mkdir -p "$repo_references_claude"
+	rsync -a --delete "$repo_references_code/" "$repo_references_claude/"
+	echo "Restored repo content-review reference files from canonical source"
 }
 
 sync_skill() {
@@ -51,7 +52,7 @@ sync_skill() {
 	require_dir "$source_dir" "managed skill '$skill' in $source_root"
 	mkdir -p "$target_dir"
 	if [[ "$skill" == "content-review" ]]; then
-		rsync -a --delete --exclude='references/content-guidelines.md' "$source_dir/" "$target_dir/"
+		rsync -a --delete --exclude='references/' "$source_dir/" "$target_dir/"
 	else
 		rsync -a --delete "$source_dir/" "$target_dir/"
 	fi
@@ -69,7 +70,7 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	sync_repo_guidelines_copies
+	sync_repo_reference_copies
 fi
 
 if [[ -f "$GLOBAL_CLAUDE_MD" ]]; then
