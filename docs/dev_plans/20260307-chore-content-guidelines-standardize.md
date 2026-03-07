@@ -76,7 +76,7 @@ The repo previously treated content guidelines as externally sourced, with scrip
 | `scripts/check-sync.sh` | Validate repo/global guideline copies against repo canonical |
 | `.env.example` | Remove external guideline-source configuration |
 | `README.md` | Slim to human essentials, link to AGENTS.md |
-| `AGENTS.md` | New root-level operational reference for both agents |
+| `AGENTS.md` | New root-level operational reference for both agents (updated across multiple commits) |
 | `docs/dev_plans/README.md` | Add this work item to completed tasks |
 
 ### Authority Decision
@@ -121,6 +121,9 @@ Executed:
 - Issue: `sync-skills.sh` rsync `--exclude` only covered `content-guidelines.md`, leaving `writing-style-rules.md` vulnerable to deletion if missing from global.
 - Solution: Exclude the entire `references/` directory for content-review during sync.
 
+- Issue: `bootstrap-skills.sh` overwrote pre-existing global `content-review/references/` without respecting `--force`.
+- Solution: Add non-destructive guard — skip if global references already have content unless `--force` is used.
+
 ## Acceptance Criteria
 
 - [x] Drafting rules explicitly discourage generic AI-sounding output
@@ -145,6 +148,12 @@ Executed:
 - [x] Harden `sync-skills.sh` to exclude entire `references/` directory for content-review (prevents accidental deletion of `writing-style-rules.md`)
 - [x] Code review passed
 - [x] Security review passed (no vulnerabilities)
+
+### Phase 7: Bootstrap Reference Sync Safety (Codex fix)
+
+- [x] `bootstrap-skills.sh` respects `--force` for `content-review/references/` (skips if global already has content unless `--force`)
+- [x] `check-sync.sh` explicitly requires `content-guidelines.md` and `writing-style-rules.md` via `REQUIRED_REFERENCE_FILES` array
+- [x] `AGENTS.md` gotcha updated: `.env` is optional, not required
 
 ## Final Results
 
