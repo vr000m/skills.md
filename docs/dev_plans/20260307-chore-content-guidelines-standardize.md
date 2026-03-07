@@ -70,10 +70,10 @@ The repo previously treated content guidelines as externally sourced, with scrip
 | `.claude/skills/content-review/SKILL.md` | Mirror review skill updates |
 | `.codex/skills/content-review/references/content-guidelines.md` | Canonical guideline file with anti-LLM rules |
 | `.claude/skills/content-review/references/content-guidelines.md` | Mirror canonical guideline file |
-| `scripts/sync-skills.sh` | Preserve repo-canonical guideline file on sync |
-| `scripts/promote-skills.sh` | Copy canonical guideline file to global skill dirs |
-| `scripts/bootstrap-skills.sh` | Copy canonical guideline file on bootstrap |
-| `scripts/check-sync.sh` | Validate repo/global guideline copies against repo canonical |
+| `scripts/sync-skills.sh` | Exclude `references/` dir for content-review during sync; restore repo Claude copy from canonical codex source |
+| `scripts/promote-skills.sh` | Copy canonical `references/` dir to both global targets |
+| `scripts/bootstrap-skills.sh` | Copy canonical `references/` dir to global with `--force` guard |
+| `scripts/check-sync.sh` | Validate all `references/` files across repo/global; require `content-guidelines.md` and `writing-style-rules.md` |
 | `.env.example` | Remove external guideline-source configuration |
 | `README.md` | Slim to human essentials, link to AGENTS.md |
 | `AGENTS.md` | New root-level operational reference for both agents (updated across multiple commits) |
@@ -81,7 +81,7 @@ The repo previously treated content guidelines as externally sourced, with scrip
 
 ### Authority Decision
 
-- Canonical source: `.codex/skills/content-review/references/content-guidelines.md`
+- Canonical source: `.codex/skills/content-review/references/` (entire directory)
 - Repo mirror: `.claude/skills/content-review/references/content-guidelines.md`
 - Global mirrors:
   - `~/.codex/skills/content-review/references/content-guidelines.md`
