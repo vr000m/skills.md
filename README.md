@@ -2,11 +2,6 @@
 
 Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and [OpenAI Codex CLI](https://github.com/openai/codex) agents.
 
-## Structure
-
-- `.claude/skills/` -- Skills for Claude Code (`/slash-command` style)
-- `.codex/skills/` -- Skills for OpenAI Codex CLI
-
 ## Skills
 
 | Skill | Claude | Codex | Description |
@@ -16,44 +11,6 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 | content-draft | Yes | Yes | Draft content following style guidelines |
 | content-review | Yes | Yes | Review content against style guidelines |
 | update-docs | Yes | Yes | Audit and update stale docs against branch diffs |
-
-## Authority Model
-
-Default authority is global skills, not this repo.
-
-- Global Codex authority: `~/.codex/skills`
-- Global Claude authority: `~/.claude/skills`
-- Global AGENTS.md: `~/.codex/AGENTS.md` (synced bidirectionally to `.codex/AGENTS.md`)
-- Global CLAUDE.md: `~/.claude/CLAUDE.md` (synced bidirectionally to `.claude/CLAUDE.md`)
-- Managed scope: only skills in `MANAGED_SKILLS` are synced/checked/promoted/bootstrapped
-- Content guidelines authority: repo-canonical file at `.codex/skills/content-review/references/content-guidelines.md`
-- Repo Claude mirror path: `.claude/skills/content-review/references/content-guidelines.md`
-- Global mirrors:
-  1. `~/.codex/skills/content-review/references/content-guidelines.md`
-  2. `~/.claude/skills/content-review/references/content-guidelines.md`
-
-## Workflow
-
-- Day-to-day: run `just sync-skills` to mirror `global -> repo`
-- Intentional overwrite: run `just promote-skills` to set `repo -> global`
-- New machine setup: run `just bootstrap-skills` (initialises missing managed skills only)
-- Force bootstrap overwrite when needed: run `just bootstrap-skills-force`
-- Validation: run `just check-sync`
-
-Notes:
-- All commands sync `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` alongside managed skills.
-- `promote-skills` and `bootstrap-skills` copy the repo-canonical `content-guidelines.md` into global skill directories when `content-review` is in `MANAGED_SKILLS`.
-- `bootstrap-skills` is non-destructive unless `--force` is provided (applies to skills, CLAUDE.md, and AGENTS.md).
-- `sync-skills` preserves repo-canonical `content-guidelines.md` (does not overwrite it from global) and refreshes the repo Claude copy from the canonical file.
-- `sync-skills` warns for missing global `AGENTS.md` only when repo `.codex/AGENTS.md` exists.
-
-## Conflict Policy
-
-Treat conflicts as policy decisions, not merge-resolution tasks.
-
-- Repo-only drift: run `just sync-skills` (discard) or `just promote-skills` (adopt)
-- Global-only drift: run `just sync-skills`
-- Both changed: decide authority explicitly, then sync again
 
 ## Setup
 
@@ -69,17 +26,10 @@ brew install just shellcheck shfmt
 cp .env.example .env
 ```
 
-3. (Optional) restrict managed skills:
+3. (Optional) restrict managed skills in `.env`:
 
 ```bash
 MANAGED_SKILLS="content-draft content-review dev-plan fan-out update-docs"
 ```
 
-## Commands
-
-- `just sync-skills`
-- `just promote-skills`
-- `just bootstrap-skills`
-- `just bootstrap-skills-force`
-- `just check-sync`
-- `just lint-scripts`
+See [AGENTS.md](AGENTS.md) for commands, architecture, authority model, and workflow details.

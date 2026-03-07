@@ -124,6 +124,14 @@ Executed:
 - [x] Validation commands completed successfully
 - [x] A dedicated dev plan exists for downstream review
 
+### Phase 5: Docs Deduplication
+
+- [x] Add root `AGENTS.md` with project-specific operational context (commands, architecture, authority model, gotchas)
+- [x] Slim `README.md` to human essentials (intro, skills table, setup) and link to `AGENTS.md`
+- [x] Remove duplicated authority model, workflow, conflict policy, and commands sections from `README.md`
+
 ## Final Results
 
 This repo now owns the content-guideline authority. The draft and review skills both enforce anti-LLM authenticity constraints, the sync tooling mirrors the canonical guideline file outward instead of pulling it in from elsewhere, and the updated skill copies have already been promoted to the global Codex and Claude skill folders.
+
+Root `AGENTS.md` is now the single source of operational details for both Claude Code and Codex CLI. `README.md` focuses on human onboarding and links to `AGENTS.md` for the rest.
