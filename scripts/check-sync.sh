@@ -36,11 +36,19 @@ if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	REPO_CLAUDE_REFERENCES_DIR="$ROOT_DIR/.claude/skills/content-review/references"
 	GLOBAL_CODEX_REFERENCES_DIR="$GLOBAL_CODEX_SKILLS_DIR/content-review/references"
 	GLOBAL_CLAUDE_REFERENCES_DIR="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
+	REQUIRED_REFERENCE_FILES=("content-guidelines.md" "writing-style-rules.md")
 
 	if [[ ! -d "$CANONICAL_REFERENCES_DIR" ]]; then
 		echo "drift: missing canonical repo content-review references dir at $CANONICAL_REFERENCES_DIR"
 		GUIDE_DIFF=1
 	fi
+
+	for required_reference in "${REQUIRED_REFERENCE_FILES[@]}"; do
+		if [[ ! -f "$CANONICAL_REFERENCES_DIR/$required_reference" ]]; then
+			echo "drift: missing canonical repo $required_reference at $CANONICAL_REFERENCES_DIR/$required_reference"
+			GUIDE_DIFF=1
+		fi
+	done
 
 	for canonical_file in "$CANONICAL_REFERENCES_DIR"/*; do
 		if [[ ! -f "$canonical_file" ]]; then

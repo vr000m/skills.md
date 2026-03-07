@@ -44,9 +44,18 @@ copy_reference_files_to_global() {
 	local global_references_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
 
 	mkdir -p "$global_references_code" "$global_references_claude"
-	rsync -a --delete "$repo_references_code/" "$global_references_code/"
-	rsync -a --delete "$repo_references_code/" "$global_references_claude/"
-	echo "Copied canonical repo content-review reference files to global skill directories"
+
+	if [[ "$force_overwrite" -eq 0 && -n "$(find "$global_references_code" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+		echo "skip: $global_references_code already has content (use --force to overwrite)"
+	else
+		rsync -a --delete "$repo_references_code/" "$global_references_code/"
+	fi
+
+	if [[ "$force_overwrite" -eq 0 && -n "$(find "$global_references_claude" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+		echo "skip: $global_references_claude already has content (use --force to overwrite)"
+	else
+		rsync -a --delete "$repo_references_code/" "$global_references_claude/"
+	fi
 }
 
 mkdir -p "$GLOBAL_CODEX_SKILLS_DIR" "$GLOBAL_CLAUDE_SKILLS_DIR"
