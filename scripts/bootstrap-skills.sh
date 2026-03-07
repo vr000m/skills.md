@@ -11,8 +11,6 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
-CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
-CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -45,37 +43,11 @@ copy_guidelines_to_global() {
 	local repo_guidelines_claude="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
 	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
 	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
-	local tmp_file=""
 
 	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
-
-	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_code"
-		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_claude"
-		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
-	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		if command -v curl >/dev/null 2>&1; then
-			tmp_file="$(mktemp "$ROOT_DIR/.guidelines.XXXXXX")"
-			if curl -fsSL "$CONTENT_GUIDELINES_URL" -o "$tmp_file"; then
-				cp "$tmp_file" "$global_guidelines_code"
-				cp "$tmp_file" "$global_guidelines_claude"
-				echo "Fetched content guidelines from URL"
-			else
-				cp "$repo_guidelines_code" "$global_guidelines_code"
-				cp "$repo_guidelines_claude" "$global_guidelines_claude"
-				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, used repo content-guidelines copy" >&2
-			fi
-			rm -f "$tmp_file"
-		else
-			cp "$repo_guidelines_code" "$global_guidelines_code"
-			cp "$repo_guidelines_claude" "$global_guidelines_claude"
-			echo "warn: curl is not available, used repo content-guidelines copy" >&2
-		fi
-	else
-		cp "$repo_guidelines_code" "$global_guidelines_code"
-		cp "$repo_guidelines_claude" "$global_guidelines_claude"
-		echo "warn: no content guidelines source configured, used repo content-guidelines copy" >&2
-	fi
+	cp "$repo_guidelines_code" "$global_guidelines_code"
+	cp "$repo_guidelines_claude" "$global_guidelines_claude"
+	echo "Copied canonical repo content-guidelines.md to global skill directories"
 }
 
 mkdir -p "$GLOBAL_CODEX_SKILLS_DIR" "$GLOBAL_CLAUDE_SKILLS_DIR"

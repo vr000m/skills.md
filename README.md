@@ -26,10 +26,11 @@ Default authority is global skills, not this repo.
 - Global AGENTS.md: `~/.codex/AGENTS.md` (synced bidirectionally to `.codex/AGENTS.md`)
 - Global CLAUDE.md: `~/.claude/CLAUDE.md` (synced bidirectionally to `.claude/CLAUDE.md`)
 - Managed scope: only skills in `MANAGED_SKILLS` are synced/checked/promoted/bootstrapped
-- Content guidelines authority (in priority order):
-  1. `CONTENT_GUIDELINES_LOCAL` from `.env` (if file exists)
-  2. `CONTENT_GUIDELINES_URL` (raw GitHub URL)
-  3. repo copy only as fallback while bootstrapping
+- Content guidelines authority: repo-canonical file at `.codex/skills/content-review/references/content-guidelines.md`
+- Repo Claude mirror path: `.claude/skills/content-review/references/content-guidelines.md`
+- Global mirrors:
+  1. `~/.codex/skills/content-review/references/content-guidelines.md`
+  2. `~/.claude/skills/content-review/references/content-guidelines.md`
 
 ## Workflow
 
@@ -41,10 +42,10 @@ Default authority is global skills, not this repo.
 
 Notes:
 - All commands sync `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` alongside managed skills.
-- `promote-skills` and `bootstrap-skills` refresh global `content-guidelines.md` when `content-review` is in `MANAGED_SKILLS`.
+- `promote-skills` and `bootstrap-skills` copy the repo-canonical `content-guidelines.md` into global skill directories when `content-review` is in `MANAGED_SKILLS`.
 - `bootstrap-skills` is non-destructive unless `--force` is provided (applies to skills, CLAUDE.md, and AGENTS.md).
+- `sync-skills` preserves repo-canonical `content-guidelines.md` (does not overwrite it from global) and refreshes the repo Claude copy from the canonical file.
 - `sync-skills` warns for missing global `AGENTS.md` only when repo `.codex/AGENTS.md` exists.
-- If local/remote authoritative guidelines are unavailable, scripts fall back to the repo `content-guidelines.md` copy and print a warning.
 
 ## Conflict Policy
 
@@ -68,13 +69,7 @@ brew install just shellcheck shfmt
 cp .env.example .env
 ```
 
-3. Set your local content-guidelines path in `.env`:
-
-```bash
-CONTENT_GUIDELINES_LOCAL="/Users/vr000m/Code/vr000m/varunsingh.net/.claude/content-guidelines.md"
-```
-
-4. (Optional) restrict managed skills:
+3. (Optional) restrict managed skills:
 
 ```bash
 MANAGED_SKILLS="content-draft content-review dev-plan fan-out update-docs"

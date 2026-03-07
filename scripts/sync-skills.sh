@@ -11,8 +11,6 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
-CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
-CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -30,32 +28,17 @@ require_dir() {
 	fi
 }
 
-copy_guidelines() {
+sync_repo_guidelines_copies() {
 	local repo_guidelines_code="$REPO_CODEX_DIR/content-review/references/content-guidelines.md"
 	local repo_guidelines_claude="$REPO_CLAUDE_DIR/content-review/references/content-guidelines.md"
-	local tmp_file=""
 
-	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		cp "$CONTENT_GUIDELINES_LOCAL" "$repo_guidelines_code"
-		cp "$CONTENT_GUIDELINES_LOCAL" "$repo_guidelines_claude"
-		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
-	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		if command -v curl >/dev/null 2>&1; then
-			tmp_file="$(mktemp "$ROOT_DIR/.guidelines.XXXXXX")"
-			if curl -fsSL "$CONTENT_GUIDELINES_URL" -o "$tmp_file"; then
-				cp "$tmp_file" "$repo_guidelines_code"
-				cp "$tmp_file" "$repo_guidelines_claude"
-				echo "Fetched content guidelines from URL"
-			else
-				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, keeping repo content-guidelines copy" >&2
-			fi
-			rm -f "$tmp_file"
-		else
-			echo "warn: curl is not available, keeping repo content-guidelines copy" >&2
-		fi
-	else
-		echo "warn: no content guidelines source configured, keeping repo content-guidelines copy" >&2
+	if [[ ! -f "$repo_guidelines_code" ]]; then
+		echo "error: missing canonical content-guidelines.md at $repo_guidelines_code" >&2
+		exit 1
 	fi
+
+	cp "$repo_guidelines_code" "$repo_guidelines_claude"
+	echo "Restored repo content-guidelines.md copies from canonical source"
 }
 
 sync_skill() {
@@ -67,7 +50,11 @@ sync_skill() {
 
 	require_dir "$source_dir" "managed skill '$skill' in $source_root"
 	mkdir -p "$target_dir"
-	rsync -a --delete "$source_dir/" "$target_dir/"
+	if [[ "$skill" == "content-review" ]]; then
+		rsync -a --delete --exclude='references/content-guidelines.md' "$source_dir/" "$target_dir/"
+	else
+		rsync -a --delete "$source_dir/" "$target_dir/"
+	fi
 }
 
 require_dir "$GLOBAL_CODEX_SKILLS_DIR" "GLOBAL_CODEX_SKILLS_DIR"
@@ -82,7 +69,7 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	copy_guidelines
+	sync_repo_guidelines_copies
 fi
 
 if [[ -f "$GLOBAL_CLAUDE_MD" ]]; then

@@ -11,8 +11,6 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
-CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
-CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -34,28 +32,44 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		if ! cmp -s "$CONTENT_GUIDELINES_LOCAL" "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: codex content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-		if ! cmp -s "$CONTENT_GUIDELINES_LOCAL" "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: claude content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		guidelines_remote="$(curl -fsSL "$CONTENT_GUIDELINES_URL")"
-		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: codex content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: claude content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-	else
-		echo "error: no content guidelines source configured"
-		exit 1
+	CANONICAL_GUIDELINES="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
+	REPO_CLAUDE_GUIDELINES="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
+	GLOBAL_CODEX_GUIDELINES="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
+	GLOBAL_CLAUDE_GUIDELINES="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
+
+	if [[ ! -f "$CANONICAL_GUIDELINES" ]]; then
+		echo "drift: missing canonical repo content-guidelines.md at $CANONICAL_GUIDELINES"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ ! -f "$REPO_CLAUDE_GUIDELINES" ]]; then
+		echo "drift: missing repo claude content-guidelines.md at $REPO_CLAUDE_GUIDELINES"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ ! -f "$GLOBAL_CODEX_GUIDELINES" ]]; then
+		echo "drift: missing global codex content-guidelines.md at $GLOBAL_CODEX_GUIDELINES"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ ! -f "$GLOBAL_CLAUDE_GUIDELINES" ]]; then
+		echo "drift: missing global claude content-guidelines.md at $GLOBAL_CLAUDE_GUIDELINES"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ -f "$CANONICAL_GUIDELINES" && -f "$REPO_CLAUDE_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$REPO_CLAUDE_GUIDELINES"; then
+		echo "drift: repo claude content-guidelines.md differs from repo canonical copy"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ -f "$CANONICAL_GUIDELINES" && -f "$GLOBAL_CODEX_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$GLOBAL_CODEX_GUIDELINES"; then
+		echo "drift: global codex content-guidelines.md differs from repo canonical copy"
+		GUIDE_DIFF=1
+	fi
+
+	if [[ -f "$CANONICAL_GUIDELINES" && -f "$GLOBAL_CLAUDE_GUIDELINES" ]] && ! cmp -s "$CANONICAL_GUIDELINES" "$GLOBAL_CLAUDE_GUIDELINES"; then
+		echo "drift: global claude content-guidelines.md differs from repo canonical copy"
+		GUIDE_DIFF=1
 	fi
 fi
 
