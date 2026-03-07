@@ -75,7 +75,8 @@ The repo previously treated content guidelines as externally sourced, with scrip
 | `scripts/bootstrap-skills.sh` | Copy canonical guideline file on bootstrap |
 | `scripts/check-sync.sh` | Validate repo/global guideline copies against repo canonical |
 | `.env.example` | Remove external guideline-source configuration |
-| `README.md` | Document repo-canonical guideline authority |
+| `README.md` | Slim to human essentials, link to AGENTS.md |
+| `AGENTS.md` | New root-level operational reference for both agents |
 | `docs/dev_plans/README.md` | Add this work item to completed tasks |
 
 ### Authority Decision
@@ -114,6 +115,12 @@ Executed:
 - Issue: The repo had no dedicated dev plan for this standardization work, which made later review less precise.
 - Solution: Add this plan file and update `docs/dev_plans/README.md`.
 
+- Issue: `promote-skills.sh` and `bootstrap-skills.sh` copied each repo guideline copy to its own global target, allowing drift if the Claude copy was hand-edited.
+- Solution: Copy from the single canonical source (codex) to both global targets.
+
+- Issue: `sync-skills.sh` rsync `--exclude` only covered `content-guidelines.md`, leaving `writing-style-rules.md` vulnerable to deletion if missing from global.
+- Solution: Exclude the entire `references/` directory for content-review during sync.
+
 ## Acceptance Criteria
 
 - [x] Drafting rules explicitly discourage generic AI-sounding output
@@ -129,6 +136,15 @@ Executed:
 - [x] Add root `AGENTS.md` with project-specific operational context (commands, architecture, authority model, gotchas)
 - [x] Slim `README.md` to human essentials (intro, skills table, setup) and link to `AGENTS.md`
 - [x] Remove duplicated authority model, workflow, conflict policy, and commands sections from `README.md`
+
+### Phase 6: Review Fixes
+
+- [x] Fix guideline promotion drift: `promote-skills.sh` and `bootstrap-skills.sh` now copy from canonical codex source to both global targets
+- [x] Add explicit cross-reference to full anti-LLM rule set in `content-draft/SKILL.md`
+- [x] Update `AGENTS.md` gotcha to reflect repo-canonical model (not old `.env` priority chain)
+- [x] Harden `sync-skills.sh` to exclude entire `references/` directory for content-review (prevents accidental deletion of `writing-style-rules.md`)
+- [x] Code review passed
+- [x] Security review passed (no vulnerabilities)
 
 ## Final Results
 
