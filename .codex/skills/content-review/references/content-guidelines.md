@@ -32,6 +32,23 @@ Blog posts target engineers and product managers, explaining complex topics simp
   - **TIL exception (selective)**: If a TIL is explicitly a collection of distinct, unrelated ideas, a short bullet list is allowed in the body. Keep it brief, add a one-sentence intro, and avoid lists when the content can be expressed as short paragraphs.
   - Use flowing prose and paragraphs for all other content
 
+### Anti-LLM Authenticity Rules
+
+Use these rules to avoid generic template output. Treat them as quality constraints, not proof of AI usage.
+
+- **Concrete-first opener**: Start with a specific event, result, or problem from the work. Avoid meta framing such as "In this post, I'll cover...".
+- **Evidence density**: Each major section must include at least one concrete anchor (command, file path, metric, error string, timestamp, named system, or explicit decision).
+- **Decision with trade-off**: When you say "we chose X", include "instead of Y" and one downside.
+- **Failure and adjustment**: Include at least one thing that failed (or nearly failed), why it failed, and what changed.
+- **Original stance**: Include at least one non-obvious opinion grounded in the implementation details or outcome.
+- **No abstraction-only paragraphs**: Every paragraph should contain evidence, a decision, or a result.
+- **Avoid template phrases**: Avoid stock phrasing and AI-signalling vocabulary unless it is genuinely the best word. Avoid examples like "delve", "ever-evolving", "it is worth noting", "seamless", "leverage", "in conclusion", "this underscores", "this highlights", and "this landscape".
+- **Avoid formulaic contrast patterns**: Don't overuse repetitive structures such as "not just X, but Y" or "not only X, but Y".
+- **Avoid forced variation**: Do not rotate synonyms for the same concept just to sound varied. Prefer consistency over "elegant variation".
+- **Control formatting tics**: Do not overuse em dashes, boldface, or repeated "rule of three" rhythms.
+- **No assistant meta residue**: Remove phrases like "I hope this helps", "as of my last update", "would you like me to...", and any placeholder text (`[X]`, `{placeholder}`, `Subject:` scaffolding).
+- **Final de-LLM pass**: Before finalising, run a focused pass to remove generic transitions, hedge-heavy filler, and templated recap lines.
+
 ### Structure Requirements
 
 Note: TILs (Today I Learned posts) are exempt from the TL;DR and hero image requirements because they should be short. However, TILs still require a forward-looking close (even a single sentence) and should not end abruptly on a bullet list, bare code block, or bare link.
@@ -152,6 +169,12 @@ Always ask for clarification on:
 - [ ] No duplicate information presented in two forms within the same post
 - [ ] Acronyms expanded on first use (except well-known: STT, LLM, API)
 - [ ] No duplicate links (same URL linked twice in the same paragraph)
+- [ ] Opening paragraph starts with a concrete event/result, not meta framing
+- [ ] Each major section includes at least one concrete anchor (command/path/metric/error/decision)
+- [ ] At least one explicit trade-off is stated (`chose X instead of Y`, with downside)
+- [ ] At least one failed attempt (or rough edge) and adjustment is documented
+- [ ] No templated AI-signalling phrases or assistant meta residue
+- [ ] Final de-LLM pass completed (generic transitions and filler removed)
 
 ### TIL-Specific Checklist
 
@@ -169,6 +192,10 @@ TILs are shorter and skip some blog requirements. Use this subset instead of the
 - [ ] No typos or misspellings
 - [ ] Acronyms expanded on first use (except well-known: STT, LLM, API)
 - [ ] No duplicate links (same URL linked twice in the same paragraph)
+- [ ] Opening line uses a concrete event/result, not "In this post..." style framing
+- [ ] Includes at least one concrete anchor (command/path/metric/error/decision)
+- [ ] Includes one trade-off or one failed attempt plus adjustment
+- [ ] No templated AI-signalling phrases or assistant meta residue
 - [ ] Does not end abruptly on a bare code block, bullet list, or link
 - [ ] Ends with a forward-looking close (even a single sentence)
 - [ ] Post-publication updates use `**Updated (YYYY-MM)**:` format

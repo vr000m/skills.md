@@ -11,8 +11,6 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
-CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
-CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -34,29 +32,64 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		if ! cmp -s "$CONTENT_GUIDELINES_LOCAL" "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: codex content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-		if ! cmp -s "$CONTENT_GUIDELINES_LOCAL" "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: claude content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		guidelines_remote="$(curl -fsSL "$CONTENT_GUIDELINES_URL")"
-		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: codex content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-		if ! cmp -s <(printf '%s' "$guidelines_remote") "$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"; then
-			echo "drift: claude content-guidelines.md is not authoritative"
-			GUIDE_DIFF=1
-		fi
-	else
-		echo "error: no content guidelines source configured"
-		exit 1
+	CANONICAL_REFERENCES_DIR="$ROOT_DIR/.codex/skills/content-review/references"
+	REPO_CLAUDE_REFERENCES_DIR="$ROOT_DIR/.claude/skills/content-review/references"
+	GLOBAL_CODEX_REFERENCES_DIR="$GLOBAL_CODEX_SKILLS_DIR/content-review/references"
+	GLOBAL_CLAUDE_REFERENCES_DIR="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
+	REQUIRED_REFERENCE_FILES=("content-guidelines.md" "writing-style-rules.md")
+
+	if [[ ! -d "$CANONICAL_REFERENCES_DIR" ]]; then
+		echo "drift: missing canonical repo content-review references dir at $CANONICAL_REFERENCES_DIR"
+		GUIDE_DIFF=1
 	fi
+
+	for required_reference in "${REQUIRED_REFERENCE_FILES[@]}"; do
+		if [[ ! -f "$CANONICAL_REFERENCES_DIR/$required_reference" ]]; then
+			echo "drift: missing canonical repo $required_reference at $CANONICAL_REFERENCES_DIR/$required_reference"
+			GUIDE_DIFF=1
+		fi
+	done
+
+	for canonical_file in "$CANONICAL_REFERENCES_DIR"/*; do
+		if [[ ! -f "$canonical_file" ]]; then
+			continue
+		fi
+
+		reference_name="$(basename "$canonical_file")"
+		repo_claude_file="$REPO_CLAUDE_REFERENCES_DIR/$reference_name"
+		global_codex_file="$GLOBAL_CODEX_REFERENCES_DIR/$reference_name"
+		global_claude_file="$GLOBAL_CLAUDE_REFERENCES_DIR/$reference_name"
+
+		if [[ ! -f "$repo_claude_file" ]]; then
+			echo "drift: missing repo claude $reference_name at $repo_claude_file"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ ! -f "$global_codex_file" ]]; then
+			echo "drift: missing global codex $reference_name at $global_codex_file"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ ! -f "$global_claude_file" ]]; then
+			echo "drift: missing global claude $reference_name at $global_claude_file"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ -f "$repo_claude_file" ]] && ! cmp -s "$canonical_file" "$repo_claude_file"; then
+			echo "drift: repo claude $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ -f "$global_codex_file" ]] && ! cmp -s "$canonical_file" "$global_codex_file"; then
+			echo "drift: global codex $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+
+		if [[ -f "$global_claude_file" ]] && ! cmp -s "$canonical_file" "$global_claude_file"; then
+			echo "drift: global claude $reference_name differs from repo canonical copy"
+			GUIDE_DIFF=1
+		fi
+	done
 fi
 
 CLAUDE_MD_DIFF=0

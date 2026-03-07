@@ -47,8 +47,8 @@ Read the appropriate reference files based on content type:
 
 | Content Type    | Style Rules | Structure Rules | SEO/Meta Rules | Checklist |
 |----------------|-------------|-----------------|----------------|-----------|
-| `blog`         | Full        | Full            | Full           | Full blog checklist (26 items) |
-| `til`          | Full        | TIL-specific    | Frontmatter only | TIL checklist (13 items) |
+| `blog`         | Full        | Full            | Full           | Full blog checklist |
+| `til`          | Full        | TIL-specific    | Frontmatter only | TIL checklist |
 | `technical-doc`| Style only  | Headings + code | Skip           | Style subset |
 | `notion`       | Style only  | Skip            | Skip           | Style subset |
 | `general`      | Style only  | Skip            | Skip           | Style subset |
@@ -73,6 +73,9 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 - Incorrect verb forms after auxiliaries
 - Typos and misspellings (transposed letters, dropped characters, stray spaces)
 - Technical terms not in backticks (filenames, functions, CLI commands, env vars, HTML elements)
+- AI-signalling template phrases and assistant-meta residue (`in this post`, `delve`, `it is worth noting`, `I hope this helps`, placeholder scaffolding)
+- Hedge-heavy or abstraction-only prose (paragraphs that lack evidence, decision, or outcome)
+- Overused formatting tics (excessive em dashes, boldface, repeated "rule of three" cadence)
 
 **Structure** (blog, TIL, and technical-doc — adapted by type):
 - TL;DR present and bolded (blog only)
@@ -96,6 +99,11 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 - Rough edges or limitations acknowledged (not all-positive)
 - Source attribution — quotes and references linked
 - Best lines given room to breathe (not buried mid-paragraph)
+- Concrete anchors included in each major section (command/path/metric/error/decision)
+- At least one explicit trade-off (`chose X instead of Y`, including downside)
+- At least one failed attempt or rough-edge adjustment described
+- Avoidance of formulaic contrast patterns (`not just X, but Y`; `not only X, but Y`)
+- Includes one non-obvious, evidence-backed judgement (not just neutral recap)
 
 **SEO/Meta** (blog only, frontmatter check for TIL):
 - Blog frontmatter completeness: title, slug, excerpt, published_date, status, category, tags, authors
@@ -108,8 +116,8 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 
 ### Severity Levels
 
-- **Critical**: Violates a hard rule. Must fix before publishing. Examples: missing TL;DR on blog post, comma splices, American spellings in body text, missing required frontmatter fields, code-prose identifier mismatch.
-- **Important**: Weakens quality. Should fix. Examples: passive voice in key sections, missing code language identifiers, no forward-looking close, bullet lists in body, stale code comments, inconsistent command syntax.
+- **Critical**: Violates a hard rule. Must fix before publishing. Examples: missing TL;DR on blog post, comma splices, American spellings in body text, missing required frontmatter fields, code-prose identifier mismatch, templated AI-signalling phrasing, missing concrete anchors/trade-offs/failure notes.
+- **Important**: Weakens quality. Should fix. Examples: passive voice in key sections, missing code language identifiers, no forward-looking close, bullet lists in body, stale code comments, inconsistent command syntax, excessive hedge-heavy filler.
 - **Suggestion**: Polish items. Nice to have. Examples: could be more concise, alternative word choice, structural reordering, line that deserves its own paragraph.
 
 ## Phase 4: Output Structured Report
@@ -138,7 +146,7 @@ Present findings in this format:
 1. **[Category]**: [Brief recommendation]
 
 ### Checklist Status
-[Render the applicable checklist (blog 26-item or TIL 13-item) with pass/fail marks]
+[Render the applicable checklist (blog or TIL) with pass/fail marks]
 ```
 
 For `technical-doc`: report Style findings plus the Structure subset (heading hierarchy, code block language identifiers, code-prose consistency, code example completeness). Skip Content Quality and SEO/Meta.

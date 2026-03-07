@@ -11,8 +11,6 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
-CONTENT_GUIDELINES_LOCAL="${CONTENT_GUIDELINES_LOCAL:-}"
-CONTENT_GUIDELINES_URL="${CONTENT_GUIDELINES_URL:-https://raw.githubusercontent.com/vr000m/varunsingh.net/main/.claude/content-guidelines.md}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -40,41 +38,23 @@ fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 
-copy_guidelines_to_global() {
-	local repo_guidelines_code="$ROOT_DIR/.codex/skills/content-review/references/content-guidelines.md"
-	local repo_guidelines_claude="$ROOT_DIR/.claude/skills/content-review/references/content-guidelines.md"
-	local global_guidelines_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references/content-guidelines.md"
-	local global_guidelines_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references/content-guidelines.md"
-	local tmp_file=""
+copy_reference_files_to_global() {
+	local repo_references_code="$ROOT_DIR/.codex/skills/content-review/references"
+	local global_references_code="$GLOBAL_CODEX_SKILLS_DIR/content-review/references"
+	local global_references_claude="$GLOBAL_CLAUDE_SKILLS_DIR/content-review/references"
 
-	mkdir -p "$(dirname "$global_guidelines_code")" "$(dirname "$global_guidelines_claude")"
+	mkdir -p "$global_references_code" "$global_references_claude"
 
-	if [[ -n "$CONTENT_GUIDELINES_LOCAL" && -f "$CONTENT_GUIDELINES_LOCAL" ]]; then
-		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_code"
-		cp "$CONTENT_GUIDELINES_LOCAL" "$global_guidelines_claude"
-		echo "Using local content guidelines: $CONTENT_GUIDELINES_LOCAL"
-	elif [[ -n "$CONTENT_GUIDELINES_URL" ]]; then
-		if command -v curl >/dev/null 2>&1; then
-			tmp_file="$(mktemp "$ROOT_DIR/.guidelines.XXXXXX")"
-			if curl -fsSL "$CONTENT_GUIDELINES_URL" -o "$tmp_file"; then
-				cp "$tmp_file" "$global_guidelines_code"
-				cp "$tmp_file" "$global_guidelines_claude"
-				echo "Fetched content guidelines from URL"
-			else
-				cp "$repo_guidelines_code" "$global_guidelines_code"
-				cp "$repo_guidelines_claude" "$global_guidelines_claude"
-				echo "warn: failed to fetch CONTENT_GUIDELINES_URL, used repo content-guidelines copy" >&2
-			fi
-			rm -f "$tmp_file"
-		else
-			cp "$repo_guidelines_code" "$global_guidelines_code"
-			cp "$repo_guidelines_claude" "$global_guidelines_claude"
-			echo "warn: curl is not available, used repo content-guidelines copy" >&2
-		fi
+	if [[ "$force_overwrite" -eq 0 && -n "$(find "$global_references_code" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+		echo "skip: $global_references_code already has content (use --force to overwrite)"
 	else
-		cp "$repo_guidelines_code" "$global_guidelines_code"
-		cp "$repo_guidelines_claude" "$global_guidelines_claude"
-		echo "warn: no content guidelines source configured, used repo content-guidelines copy" >&2
+		rsync -a --delete "$repo_references_code/" "$global_references_code/"
+	fi
+
+	if [[ "$force_overwrite" -eq 0 && -n "$(find "$global_references_claude" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+		echo "skip: $global_references_claude already has content (use --force to overwrite)"
+	else
+		rsync -a --delete "$repo_references_code/" "$global_references_claude/"
 	fi
 }
 
@@ -96,7 +76,7 @@ for skill in "${managed_skills[@]}"; do
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
-	copy_guidelines_to_global
+	copy_reference_files_to_global
 fi
 
 REPO_CLAUDE_MD="$ROOT_DIR/.claude/CLAUDE.md"

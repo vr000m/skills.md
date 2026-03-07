@@ -94,11 +94,32 @@ Generate a draft following these rules:
 - **Attribute references** — link to external sources
 - **Technical terms in backticks** — filenames, functions, CLI commands, env vars
 
-## Phase 4: Present Draft
+### Anti-LLM Authenticity Constraints (Hard Rules)
+
+- **Concrete-first opener**: Start with a specific event, result, or problem from the work. Avoid framing like "In this post, I'll cover...".
+- **Evidence density**: Every major section must include at least one concrete anchor (command, file path, metric, error string, timestamp, named system, or explicit decision).
+- **Decision + trade-off**: When presenting a choice, include what was rejected and one downside of the chosen path.
+- **Failure + adjustment**: Include at least one rough edge or failed attempt and the change that resolved (or mitigated) it.
+- **No abstraction-only paragraphs**: Each paragraph should contain evidence, a decision, or an outcome.
+- **Template phrase ban**: Avoid stock AI-signalling phrasing unless truly necessary (examples: "delve", "ever-evolving", "it is worth noting", "seamless", "leverage", "in conclusion", "this underscores", "this highlights", "this landscape").
+- **Avoid formulaic cadence**: Do not overuse repetitive structures like "not just X, but Y", "not only X, but Y", or repeated rule-of-three rhythms.
+- **No assistant residue**: Remove assistant-style meta language ("I hope this helps", "would you like me to...", "as of my last update") and placeholder text (`[X]`, `{placeholder}`, `Subject:` scaffolding).
+
+## Phase 4: De-LLM Authenticity Pass
+
+Before presenting the draft, run a targeted rewrite pass:
+
+1. Replace generic transitions with concrete statements.
+2. Remove hedge-heavy filler unless uncertainty is material.
+3. Ensure section openers are not repetitive in structure.
+4. Verify the draft includes at least one trade-off and one failure/rough-edge moment.
+5. Remove any banned template phrases and assistant-meta residue.
+
+## Phase 5: Present Draft
 
 Show the complete draft in the conversation as a markdown code block. Do NOT write to a file unless the user explicitly asks.
 
-## Phase 5: Offer Next Steps
+## Phase 6: Offer Next Steps
 
 After presenting the draft, offer:
 
@@ -115,4 +136,4 @@ After presenting the draft, offer:
 - Present the session summary for user confirmation before drafting — don't assume context is complete.
 - Always produce `status: 'draft'` in frontmatter. The user publishes when ready.
 - Never write to files without explicit permission.
-- When working in the varunsingh.net repo, use the project's content guidelines file (currently `.claude/content-guidelines.md`) for additional context. Outside that repo, the style rules embedded above are sufficient.
+- Use the local skill reference file `content-review/references/content-guidelines.md` as the canonical extended guideline set, including the full anti-LLM rule set. Do not fetch guidance from external repos during drafting.
