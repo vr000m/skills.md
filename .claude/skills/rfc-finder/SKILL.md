@@ -45,12 +45,12 @@ IETF drafts frequently get renamed when they become RFCs, so a search for the dr
 1. Using `WebFetch` on the draft's Datatracker page (e.g., `https://datatracker.ietf.org/doc/draft-ietf-rmcat-gcc/`) and checking for a "Became RFC XXXX" banner or link
 2. Searching for the draft's core topic keywords alongside "RFC" to find the published version under its new title
 
-Some important specs never graduate to RFC status but are still widely implemented and are the de facto standard (e.g., Google Congestion Control / `draft-ietf-rmcat-gcc`, transport-wide congestion control / `draft-holmer-rmcat-transport-wide-cc-extensions`). When this happens:
+Some important specs never graduate to RFC status but may still be directly relevant to the user's question (e.g., Google Congestion Control / `draft-ietf-rmcat-gcc`, transport-wide congestion control / `draft-holmer-rmcat-transport-wide-cc-extensions`). When this happens:
 
-- Still include them in results — they're often more practically relevant than the published RFCs
-- Clearly label them as **Draft (widely deployed)** rather than giving them an RFC-style status
+- Include them only when they are clearly central to the query or when no published RFC covers the same work
+- Clearly label them as **Internet-Draft** or **Expired Internet-Draft** based on Datatracker metadata, not ecosystem adoption claims
 - Link to the Datatracker draft page, not to rfc-editor.org
-- If a draft expired but the technology is still in active use, note that too
+- Note only source-backed facts such as draft status, expiry, and whether Datatracker shows that the work became an RFC
 
 ## Step 3: Return Results
 
@@ -65,12 +65,12 @@ Relevant section: Section X.Y — "Section Title" (if a specific section is clea
 Note: Obsoletes RFC YYYY / Updated by RFC ZZZZ (if applicable)
 ```
 
-For widely-used drafts that never became RFCs:
+For relevant drafts that never became RFCs:
 
 ```
 **draft-name** — [Title](https://datatracker.ietf.org/doc/draft-name/)
-Status: Draft (widely deployed) | Draft (expired but widely deployed)
-Note: Explanation of why this matters despite not being an RFC.
+Status: Internet-Draft | Expired Internet-Draft
+Note: No published RFC found on Datatracker for this work as of the search.
 ```
 
 ### Ranking
@@ -86,7 +86,8 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 - Do NOT list every RFC tangentially related to a broad topic — pick the 3-5 most relevant
 - Do NOT guess RFC numbers — always verify via search
 - Do NOT link to drafts when a published RFC exists for the same work (check the draft's Datatracker page — drafts often get renamed when they become RFCs)
-- DO include widely-used drafts that never became RFCs as first-class results — see "Tracing Drafts to RFCs" above for the format
+- Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor and the user asked for that broader context
+- DO include relevant drafts that never became RFCs when they are central to the query — see "Tracing Drafts to RFCs" above for the format
 
 ## Edge Cases
 
@@ -104,21 +105,19 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 Here are the key specs for WebRTC congestion control:
 
 **draft-ietf-rmcat-gcc** — [A Google Congestion Control Algorithm for Real-Time Communication](https://datatracker.ietf.org/doc/draft-ietf-rmcat-gcc/)
-Status: Draft (widely deployed)
-Note: The most widely deployed congestion control algorithm in WebRTC (used in Chrome, libwebrtc). Never published as an RFC, but this is what most implementations actually use.
+Status: Expired Internet-Draft
+Note: No published RFC found on Datatracker for this work as of the search.
 
 **RFC 8836** — [Congestion Control Requirements for Interactive Real-Time Media](https://www.rfc-editor.org/rfc/rfc8836)
 Status: Informational
-Note: Defines the requirements that congestion control algorithms for WebRTC should meet. Start here for the big picture.
+Note: Covers congestion control requirements for interactive real-time media.
 
 **RFC 8888** — [RTP Control Protocol (RTCP) Feedback for Congestion Control](https://www.rfc-editor.org/rfc/rfc8888)
 Status: Proposed Standard
 Relevant section: Section 3 — "Congestion Control Feedback Report"
-Note: Defines the RTCP feedback format used by congestion control algorithms like GCC, NADA, and SCReAM.
 
 **RFC 8698** — [NADA: A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
 Status: Experimental
-Note: An alternative congestion control algorithm to GCC. Less widely deployed but formally published.
 
 ---
 
