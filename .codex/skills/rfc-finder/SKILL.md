@@ -114,10 +114,10 @@ Note: Informational RFC covering congestion control requirements for interactive
 
 **RFC 8888** — [RTP Control Protocol (RTCP) Feedback for Congestion Control](https://www.rfc-editor.org/rfc/rfc8888)
 Status: Proposed Standard
-Relevant section: Section 3 — "Congestion Control Feedback Report"
+Relevant section: Section 3 — "RTCP Feedback for Congestion Control"
 Note: Defines an RTCP feedback format for congestion control.
 
-**RFC 8698** — [NADA: A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
+**RFC 8698** — [Network-Assisted Dynamic Adaptation (NADA): A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
 Status: Experimental
 Note: Experimental RFC for a unified congestion control scheme for real-time media.
 
@@ -129,7 +129,7 @@ Note: Experimental RFC for a unified congestion control scheme for real-time med
 
 The function `sendNack()` most likely implements RTCP Generic NACK feedback, used in RTP-based media to request retransmission of lost packets.
 
-**RFC 4585** — [Extended RTP Profile for RTCP-Based Feedback (RTP/AVPF)](https://www.rfc-editor.org/rfc/rfc4585)
+**RFC 4585** — [Extended RTP Profile for Real-time Transport Control Protocol (RTCP)-Based Feedback (RTP/AVPF)](https://www.rfc-editor.org/rfc/rfc4585)
 Status: Proposed Standard
 Relevant section: Section 6.2.1 — "Generic NACK"
 Note: Foundational spec for RTCP feedback messages including NACK. Updated by RFC 5506 and RFC 8108.
