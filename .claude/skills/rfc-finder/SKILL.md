@@ -1,7 +1,7 @@
 ---
 name: rfc-finder
 description: "Find and link to IETF RFCs by topic, protocol, code context, or RFC number. Trigger when the user mentions 'RFC', 'IETF', 'datatracker', a specific RFC number, 'what RFC covers X', or asks about the spec behind a protocol (WebRTC, SIP, QUIC, HTTP, TLS, STUN, TURN, ICE, SDP, RTP, RTCP, SCTP, DTLS)."
-argument-hint: "<topic|protocol|RFC-number|code-snippet>"
+argument-hint: "[topic|protocol|RFC-number|code-snippet]"
 ---
 
 # RFC Finder
@@ -60,7 +60,7 @@ Format results as a concise list. For each published RFC:
 
 ```
 **RFC XXXX** — [Title](https://www.rfc-editor.org/rfc/rfcXXXX)
-Status: Proposed Standard | Informational | etc.
+Status: Proposed Standard | Draft Standard | Internet Standard | Best Current Practice | Informational | Experimental | Historic
 Relevant section: Section X.Y — "Section Title" (if a specific section is clearly relevant)
 Note: Obsoletes RFC YYYY / Updated by RFC ZZZZ (if applicable)
 ```
@@ -70,6 +70,7 @@ For relevant drafts that never became RFCs:
 ```
 **draft-name** — [Title](https://datatracker.ietf.org/doc/draft-name/)
 Status: Internet-Draft | Expired Internet-Draft
+Relevant section: Section X.Y — "Section Title" (if a specific section is clearly relevant)
 Note: No published RFC found on Datatracker for this work as of the search.
 ```
 
@@ -87,7 +88,7 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 - Do NOT guess RFC numbers — always verify via search
 - Do NOT link to drafts when a published RFC exists for the same work (check the draft's Datatracker page — drafts often get renamed when they become RFCs)
 - Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor and the user asked for that broader context
-- DO include relevant drafts that never became RFCs when they are central to the query — see "Tracing Drafts to RFCs" above for the format
+
 
 ## Edge Cases
 
@@ -114,9 +115,9 @@ Note: Covers congestion control requirements for interactive real-time media.
 
 **RFC 8888** — [RTP Control Protocol (RTCP) Feedback for Congestion Control](https://www.rfc-editor.org/rfc/rfc8888)
 Status: Proposed Standard
-Relevant section: Section 3 — "Congestion Control Feedback Report"
+Relevant section: Section 3 — "RTCP Feedback for Congestion Control"
 
-**RFC 8698** — [NADA: A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
+**RFC 8698** — [Network-Assisted Dynamic Adaptation (NADA): A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
 Status: Experimental
 
 ---
@@ -127,7 +128,7 @@ Status: Experimental
 
 The function `sendNack()` most likely implements RTCP Generic NACK feedback, used in RTP-based media to request retransmission of lost packets.
 
-**RFC 4585** — [Extended RTP Profile for RTCP-Based Feedback (RTP/AVPF)](https://www.rfc-editor.org/rfc/rfc4585)
+**RFC 4585** — [Extended RTP Profile for Real-time Transport Control Protocol (RTCP)-Based Feedback (RTP/AVPF)](https://www.rfc-editor.org/rfc/rfc4585)
 Status: Proposed Standard
 Relevant section: Section 6.2.1 — "Generic NACK"
 Note: Foundational spec for RTCP feedback messages including NACK. Updated by RFC 5506 and RFC 8108.
