@@ -1,7 +1,7 @@
 ---
 name: rfc-finder
 description: "Find and link to IETF RFCs by topic, protocol, code context, or RFC number. Trigger when the user mentions 'RFC', 'IETF', 'datatracker', a specific RFC number, 'what RFC covers X', or asks about the spec behind a protocol (WebRTC, SIP, QUIC, HTTP, TLS, STUN, TURN, ICE, SDP, RTP, RTCP, SCTP, DTLS)."
-argument-hint: "<topic|protocol|RFC-number|code-snippet>"
+argument-hint: "[topic|protocol|RFC-number|code-snippet]"
 ---
 
 # RFC Finder
@@ -60,7 +60,7 @@ Format results as a concise list. For each published RFC:
 
 ```
 **RFC XXXX** — [Title](https://www.rfc-editor.org/rfc/rfcXXXX)
-Status: Proposed Standard | Informational | etc.
+Status: Proposed Standard | Draft Standard | Internet Standard | Best Current Practice | Informational | Experimental | Historic
 Relevant section: Section X.Y — "Section Title" (if a specific section is clearly relevant)
 Note: Obsoletes RFC YYYY / Updated by RFC ZZZZ (if applicable)
 ```
@@ -70,6 +70,7 @@ For relevant drafts that never became RFCs:
 ```
 **draft-name** — [Title](https://datatracker.ietf.org/doc/draft-name/)
 Status: Internet-Draft | Expired Internet-Draft
+Relevant section: Section X.Y — "Section Title" (if a specific section is clearly relevant)
 Note: No published RFC found on Datatracker for this work as of the search.
 ```
 
@@ -87,14 +88,13 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 - Do NOT guess RFC numbers — always verify via search
 - Do NOT link to drafts when a published RFC exists for the same work (check the draft's Datatracker page — drafts often get renamed when they become RFCs)
 - Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor and the user asked for that broader context
-- DO include relevant drafts that never became RFCs when they are central to the query — see "Tracing Drafts to RFCs" above for the format
-
 ## Edge Cases
 
 - **No results found**: Tell the user the search returned nothing. Suggest alternative search terms or ask them to clarify the protocol/topic. Do not fabricate results.
 - **Invalid or non-existent RFC number**: If the user asks for a specific RFC number that doesn't exist, say so clearly. Suggest nearby RFC numbers or search by topic instead.
 - **Ambiguous query**: If a term maps to multiple protocols (e.g., "flow control" could be TCP, HTTP/2, or QUIC), ask the user to narrow it down or return the top result for each protocol with a note.
 - **Very old or obsoleted RFCs**: Always flag when an RFC has been obsoleted and link to the replacement. If the user specifically wants the old version, provide it but note the current version.
+- **Direct URL input**: If the query is a Datatracker or RFC Editor URL, open it directly, extract the RFC/draft metadata, and return it in the standard format. No search needed.
 
 ## Examples
 
@@ -110,16 +110,13 @@ Note: No published RFC found on Datatracker for this work as of the search.
 
 **RFC 8836** — [Congestion Control Requirements for Interactive Real-Time Media](https://www.rfc-editor.org/rfc/rfc8836)
 Status: Informational
-Note: Informational RFC covering congestion control requirements for interactive real-time media.
 
 **RFC 8888** — [RTP Control Protocol (RTCP) Feedback for Congestion Control](https://www.rfc-editor.org/rfc/rfc8888)
 Status: Proposed Standard
 Relevant section: Section 3 — "RTCP Feedback for Congestion Control"
-Note: Defines an RTCP feedback format for congestion control.
 
 **RFC 8698** — [Network-Assisted Dynamic Adaptation (NADA): A Unified Congestion Control Scheme for Real-Time Media](https://www.rfc-editor.org/rfc/rfc8698)
 Status: Experimental
-Note: Experimental RFC for a unified congestion control scheme for real-time media.
 
 ---
 
