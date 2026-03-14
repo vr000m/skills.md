@@ -40,7 +40,7 @@ Map the reference to a fetchable URL:
 |---|---|
 | `RFC XXXX` | `https://www.rfc-editor.org/rfc/rfcXXXX` |
 | `RFC XXXX Section X.Y` | `https://www.rfc-editor.org/rfc/rfcXXXX#section-X.Y` |
-| `draft-*` | `https://datatracker.ietf.org/doc/<draft-name>/` then follow to HTML version |
+| `draft-*` | `https://datatracker.ietf.org/doc/<draft-name>/` — check if it became a published RFC; if so, use the RFC instead |
 | W3C spec name | Use `WebSearch` to find the spec URL on `w3.org` or `spec.whatwg.org` |
 | Direct URL | Use as-is |
 
@@ -68,8 +68,8 @@ If the section contains no normative language, report that finding and suggest c
 
 Read the code using the `Read` tool. For each extracted requirement:
 
-1. Search the code for evidence that the requirement is implemented
-2. Use `Grep` to find relevant patterns (function names, constants, conditionals)
+1. Search the code for evidence that the requirement is implemented — look for relevant control flow, validation, constants, comments, and tests
+2. Use `Grep` to find relevant patterns (function names, constants, conditionals). If not found in the target file, check adjacent modules and test files before classifying as Missing
 3. Classify each requirement:
    - **Met** — code clearly implements the requirement; cite the line(s)
    - **Missing** — no evidence the requirement is addressed
@@ -120,10 +120,11 @@ When classifying, be conservative: if you are uncertain whether code meets a req
 
 ### Report Rules
 
+- Use status icons to prefix each finding: ✅ Met, ❌ Missing, ⚠️ Partial, ➖ N/A
 - Quote only the specific normative statement being checked — do not reproduce surrounding spec text
 - Always include line-number evidence for Met and Partial findings
 - Group by requirement level (MUST first, then SHOULD, then MAY)
-- Include the summary table for quick scanning
+- Include the summary table for quick scanning — always include all three rows (MUST, SHOULD, MAY) even if a level has zero requirements
 - Link to the spec section so the user can read the full context
 
 ### What NOT to Do
@@ -178,3 +179,4 @@ When classifying, be conservative: if you are uncertain whether code meets a req
 |-------|-----|---------|---------|-----|-------|
 | MUST  |   2 |       0 |       1 |   0 |     3 |
 | SHOULD|   0 |       1 |       0 |   0 |     1 |
+| MAY   |   0 |       0 |       0 |   0 |     0 |

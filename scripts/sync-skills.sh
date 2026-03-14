@@ -68,6 +68,20 @@ require_dir "$REPO_CLAUDE_DIR" "repo claude skills dir"
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 for skill in "${managed_skills[@]}"; do
+	codex_exists=0
+	claude_exists=0
+	[[ -d "$GLOBAL_CODEX_SKILLS_DIR/$skill" ]] && codex_exists=1
+	[[ -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]] && claude_exists=1
+
+	if [[ "$codex_exists" -eq 0 && "$claude_exists" -eq 0 ]]; then
+		echo "skip: $skill not found in either global dir (run promote-skills or bootstrap-skills to seed it)"
+		continue
+	fi
+	if [[ "$codex_exists" -eq 0 || "$claude_exists" -eq 0 ]]; then
+		echo "skip: $skill missing from one global dir (codex=$codex_exists, claude=$claude_exists); skipping both to avoid half-sync"
+		continue
+	fi
+
 	sync_skill "$GLOBAL_CODEX_SKILLS_DIR" "$REPO_CODEX_DIR" "$skill"
 	sync_skill "$GLOBAL_CLAUDE_SKILLS_DIR" "$REPO_CLAUDE_DIR" "$skill"
 done

@@ -96,6 +96,7 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 - **Invalid or non-existent RFC number**: If the user asks for a specific RFC number that doesn't exist, say so clearly. Suggest nearby RFC numbers or search by topic instead.
 - **Ambiguous query**: If a term maps to multiple protocols (e.g., "flow control" could be TCP, HTTP/2, or QUIC), ask the user to narrow it down or return the top result for each protocol with a note.
 - **Very old or obsoleted RFCs**: Always flag when an RFC has been obsoleted and link to the replacement. If the user specifically wants the old version, provide it but note the current version.
+- **Direct URL input**: If the query is a Datatracker or RFC Editor URL, load it directly via `WebFetch`, extract the RFC/draft metadata, and return it in the standard format. No search needed.
 
 ## Examples
 
@@ -111,7 +112,6 @@ Note: No published RFC found on Datatracker for this work as of the search.
 
 **RFC 8836** — [Congestion Control Requirements for Interactive Real-Time Media](https://www.rfc-editor.org/rfc/rfc8836)
 Status: Informational
-Note: Covers congestion control requirements for interactive real-time media.
 
 **RFC 8888** — [RTP Control Protocol (RTCP) Feedback for Congestion Control](https://www.rfc-editor.org/rfc/rfc8888)
 Status: Proposed Standard
