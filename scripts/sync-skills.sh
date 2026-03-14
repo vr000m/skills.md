@@ -49,7 +49,10 @@ sync_skill() {
 	local source_dir="$source_root/$skill"
 	local target_dir="$target_root/$skill"
 
-	require_dir "$source_dir" "managed skill '$skill' in $source_root"
+	if [[ ! -d "$source_dir" ]]; then
+		echo "skip: $source_dir not found (run promote-skills or bootstrap-skills to seed it)"
+		return
+	fi
 	mkdir -p "$target_dir"
 	if [[ "$skill" == "content-review" ]]; then
 		rsync -a --delete --exclude='references/' "$source_dir/" "$target_dir/"
