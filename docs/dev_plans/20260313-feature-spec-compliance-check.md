@@ -6,13 +6,13 @@
 | **Priority** | Medium |
 | **Branch** | `feat/rfc-finder-skill` |
 | **Created** | 2026-03-13 |
-| **Objective** | Create a Claude Code skill that checks whether code complies with a referenced specification (IETF RFC, W3C spec, IETF draft, or similar standards body document) |
+| **Objective** | Create matching Claude and Codex skills that check whether code complies with a referenced specification (IETF RFC, W3C spec, IETF draft, or similar standards body document) |
 
 ## Context
 
 The `rfc-finder` skill finds and links to IETF RFCs. This new skill addresses the next step: given code that claims to implement a spec section, verify whether the implementation actually covers the normative requirements. This is a common need in protocol/standards work where implementations must conform to MUST/SHOULD/MAY requirements (RFC 2119).
 
-Scope covers any standards body document accessible via public URL: IETF RFCs, IETF drafts, W3C specs, WHATWG specs, etc.
+Scope covers any standards body document accessible via public URL: IETF RFCs, IETF drafts, W3C specs, WHATWG specs, etc. The repo now needs the same workflow expressed for both Claude and Codex, with only runtime-specific tool instructions differing.
 
 ## Requirements
 
@@ -29,6 +29,7 @@ Scope covers any standards body document accessible via public URL: IETF RFCs, I
 ### Phase 1: Create skill file
 
 - [x] Create `.claude/skills/spec-compliance/SKILL.md` with frontmatter and body
+- [x] Create `.codex/skills/spec-compliance/SKILL.md` with frontmatter and body
 - [x] Add `spec-compliance` to `MANAGED_SKILLS` in all 4 scripts (`promote-skills.sh`, `sync-skills.sh`, `bootstrap-skills.sh`, `check-sync.sh`)
 
 ### Phase 2: Skill content
@@ -41,11 +42,13 @@ Scope covers any standards body document accessible via public URL: IETF RFCs, I
 - [x] Step 5: Return structured report
 - [x] Edge cases: spec section not found, no normative language, code too large, ambiguous spec reference
 - [x] Examples: 1 (RFC 4585 Section 6.2.1 — Generic NACK)
+- [x] Codex adaptation: replace Claude-specific browsing/reading tools with `search_query`, `open`, `find`, `rg`, and line-number inspection commands
 
 ## Technical Specifications
 
 ### Files to Create
 - `.claude/skills/spec-compliance/SKILL.md`
+- `.codex/skills/spec-compliance/SKILL.md`
 
 ### Files to Modify
 - `scripts/promote-skills.sh` — add `spec-compliance` to `MANAGED_SKILLS`
@@ -98,6 +101,11 @@ Scope covers any standards body document accessible via public URL: IETF RFCs, I
 - `Read` — read the code file(s)
 - `Grep` — search code for specific patterns matching requirements
 
+Codex counterpart:
+- `search_query` — resolve named specs on official domains only
+- `open` / `find` — fetch spec sections and navigate to headings or anchors
+- `rg` / `nl -ba` / `sed -n` — inspect code and capture line-number evidence
+
 ## Testing Notes
 
 Test with:
@@ -116,11 +124,15 @@ Test with:
 - [ ] Does not reproduce large blocks of spec text
 - [ ] Added to all 4 managed-skills scripts
 - [ ] Examples are factually correct (verified via WebFetch)
+- [ ] Claude and Codex versions differ only where the runtime tool surface requires it
 
 ## Issues & Solutions
 
-_None yet._
+- Claude and Codex do not share the same browsing or file-inspection tool surface.
+  Solution: keep the workflow and reporting format aligned, but express spec resolution and code inspection in runtime-specific terms for each skill.
 
 ## Final Results
 
-_To be filled on completion._
+- Added `.claude/skills/spec-compliance/SKILL.md` for Claude Code.
+- Added `.codex/skills/spec-compliance/SKILL.md` for Codex with equivalent workflow and Codex-native tool guidance.
+- Kept the report shape, examples, edge cases, and RFC 2119 / RFC 8174 handling aligned across both skills.
