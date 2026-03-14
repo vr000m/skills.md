@@ -10,7 +10,7 @@ fi
 
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
-MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out update-docs}"
+MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review dev-plan fan-out rfc-finder spec-compliance update-docs}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -49,7 +49,10 @@ sync_skill() {
 	local source_dir="$source_root/$skill"
 	local target_dir="$target_root/$skill"
 
-	require_dir "$source_dir" "managed skill '$skill' in $source_root"
+	if [[ ! -d "$source_dir" ]]; then
+		echo "skip: $source_dir not found (run promote-skills or bootstrap-skills to seed it)"
+		return
+	fi
 	mkdir -p "$target_dir"
 	if [[ "$skill" == "content-review" ]]; then
 		rsync -a --delete --exclude='references/' "$source_dir/" "$target_dir/"
@@ -65,6 +68,20 @@ require_dir "$REPO_CLAUDE_DIR" "repo claude skills dir"
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 for skill in "${managed_skills[@]}"; do
+	codex_exists=0
+	claude_exists=0
+	[[ -d "$GLOBAL_CODEX_SKILLS_DIR/$skill" ]] && codex_exists=1
+	[[ -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]] && claude_exists=1
+
+	if [[ "$codex_exists" -eq 0 && "$claude_exists" -eq 0 ]]; then
+		echo "skip: $skill not found in either global dir (run promote-skills or bootstrap-skills to seed it)"
+		continue
+	fi
+	if [[ "$codex_exists" -eq 0 || "$claude_exists" -eq 0 ]]; then
+		echo "skip: $skill missing from one global dir (codex=$codex_exists, claude=$claude_exists); skipping both to avoid half-sync"
+		continue
+	fi
+
 	sync_skill "$GLOBAL_CODEX_SKILLS_DIR" "$REPO_CODEX_DIR" "$skill"
 	sync_skill "$GLOBAL_CLAUDE_SKILLS_DIR" "$REPO_CLAUDE_DIR" "$skill"
 done

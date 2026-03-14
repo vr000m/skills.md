@@ -33,7 +33,7 @@ Global is authoritative, repo is a mirror:
 - `sync-skills` copies global -> repo; `promote-skills` copies repo -> global
 - `~/.claude/CLAUDE.md` syncs bidirectionally with `.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md` syncs bidirectionally with `.codex/AGENTS.md`
-- Only skills listed in `MANAGED_SKILLS` (from `.env`) are synced
+- Only skills listed in `MANAGED_SKILLS` (from `.env` or a per-command env override) are synced
 - Content guidelines authority: repo-canonical file at `.codex/skills/content-review/references/content-guidelines.md`
 - Repo Claude mirror: `.claude/skills/content-review/references/content-guidelines.md`
 - Global mirrors: `~/.codex/skills/content-review/references/content-guidelines.md` and `~/.claude/skills/content-review/references/content-guidelines.md`
@@ -44,12 +44,15 @@ Global is authoritative, repo is a mirror:
 - Intentional overwrite: run `just promote-skills` to set `repo -> global`
 - New machine setup: run `just bootstrap-skills` (initialises missing managed skills only)
 - Force bootstrap overwrite when needed: run `just bootstrap-skills-force`
+- Seed or promote only a subset for one run: prefix the command with `MANAGED_SKILLS="skill-a skill-b"`
 - Validation: run `just check-sync`
 
 Notes:
 - All commands sync `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` alongside managed skills.
 - `promote-skills` and `bootstrap-skills` copy the repo-canonical `content-review/references/` directory into global skill directories when `content-review` is in `MANAGED_SKILLS`.
 - `bootstrap-skills` is non-destructive unless `--force` is provided (applies to skills, reference files, CLAUDE.md, and AGENTS.md).
+- `promote-skills` is destructive for the selected managed skills (`rsync --delete`) and always overwrites global `CLAUDE.md` and `AGENTS.md`.
+- `sync-skills` and `check-sync` skip managed skills that do not exist yet in the global authorities and tell you to seed them with `bootstrap-skills` or `promote-skills`.
 - `sync-skills` preserves the entire repo-canonical `references/` directory for content-review (does not overwrite from global) and refreshes the repo Claude copy from the canonical codex source.
 - `check-sync` requires both `content-guidelines.md` and `writing-style-rules.md` in the canonical references directory.
 - `sync-skills` warns for missing global `AGENTS.md` only when repo `.codex/AGENTS.md` exists.
@@ -67,4 +70,6 @@ Treat conflicts as policy decisions, not merge-resolution tasks.
 - **Don't edit `.claude/CLAUDE.md` or `.codex/AGENTS.md` directly** -- they get overwritten by `sync-skills`. Edit the global files instead, then sync.
 - Content guidelines are repo-canonical at `.codex/skills/content-review/references/content-guidelines.md`, mirrored to `.claude/skills/content-review/references/content-guidelines.md` and the global skill folders
 - `bootstrap-skills` is non-destructive by default; use `--force` to overwrite
+- Scope one command without changing `.env`: `MANAGED_SKILLS="rfc-finder" just bootstrap-skills` or `MANAGED_SKILLS="rfc-finder" just promote-skills`
+- Even when you scope `MANAGED_SKILLS`, `promote-skills` still copies repo `.claude/CLAUDE.md` and `.codex/AGENTS.md` to the global paths
 - `.env` is optional; copy from `.env.example` only if you want local overrides such as `MANAGED_SKILLS`
