@@ -4,6 +4,8 @@
 
 | Date | Type | Name | Status | Branch | Plan |
 |------|------|------|--------|--------|------|
+| 2026-03-13 | feature | spec-compliance-check | Complete | feat/rfc-finder-skill | `docs/dev_plans/20260313-feature-spec-compliance-check.md` |
+| 2026-03-13 | feature | rfc-finder | Complete | feat/rfc-finder-skill | `docs/dev_plans/20260313-feature-rfc-finder.md` |
 
 ## Completed Tasks
 
