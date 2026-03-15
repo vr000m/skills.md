@@ -38,7 +38,16 @@ Global is authoritative, repo is a mirror:
 - Repo Claude mirror: `.claude/skills/content-review/references/content-guidelines.md`
 - Global mirrors: `~/.codex/skills/content-review/references/content-guidelines.md` and `~/.claude/skills/content-review/references/content-guidelines.md`
 
-## Workflow
+## Skill Workflow
+
+Recommended development workflow using skills:
+
+1. `/dev-plan create feature xyz` — Create the plan
+2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
+3. Address review findings, update plan as needed
+4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
+
+## Sync Workflow
 
 - Day-to-day: run `just sync-skills` to mirror `global -> repo`
 - Intentional overwrite: run `just promote-skills` to set `repo -> global`
