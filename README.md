@@ -31,7 +31,7 @@ cp .env.example .env
 3. (Optional) restrict managed skills in `.env`:
 
 ```bash
-MANAGED_SKILLS="content-draft content-review dev-plan fan-out rfc-finder spec-compliance update-docs"
+MANAGED_SKILLS="content-draft content-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs"
 ```
 
 For one-off runs, prefer a command-scoped override instead of editing `.env`:
