@@ -10,6 +10,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 | fan-out | Yes | Yes | Parallel agent orchestration via worktrees |
 | content-draft | Yes | Yes | Draft content following style guidelines |
 | content-review | Yes | Yes | Review content against style guidelines |
+| review-plan | Yes | Yes | Audit a dev plan for gaps, assumptions, and risks before implementation |
 | rfc-finder | Yes | Yes | Find and link to IETF RFCs and related drafts |
 | spec-compliance | Yes | Yes | Check code against RFC/W3C/WHATWG requirements |
 | update-docs | Yes | Yes | Audit and update stale docs against branch diffs |
@@ -31,7 +32,7 @@ cp .env.example .env
 3. (Optional) restrict managed skills in `.env`:
 
 ```bash
-MANAGED_SKILLS="content-draft content-review dev-plan fan-out rfc-finder spec-compliance update-docs"
+MANAGED_SKILLS="content-draft content-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs"
 ```
 
 For one-off runs, prefer a command-scoped override instead of editing `.env`:

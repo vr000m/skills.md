@@ -270,10 +270,11 @@ Integration seams are surfaced at three points in the workflow:
 
 Recommended workflow:
 1. `/dev-plan create feature auth-system` — Create the plan
-2. Complete prerequisite/sequential tasks manually
-3. `/fan-out docs/dev_plans/20260206-feature-auth-system.md` — Fan out independent tasks
-4. `/fan-out status` — Monitor progress
-5. `/fan-out merge` — Merge when all agents complete
-6. `/fan-out cleanup` — Remove worktrees
-7. Continue with remaining sequential tasks
-8. After all work is done, update the plan checkboxes
+2. `/review-plan` — Audit the plan for gaps before implementation (blocks until complete)
+3. Complete prerequisite/sequential tasks manually
+4. `/fan-out docs/dev_plans/20260206-feature-auth-system.md` — Fan out independent tasks
+5. `/fan-out status` — Monitor progress
+6. `/fan-out merge` — Merge when all agents complete
+7. `/fan-out cleanup` — Remove worktrees
+8. Continue with remaining sequential tasks
+9. After all work is done, update the plan checkboxes
