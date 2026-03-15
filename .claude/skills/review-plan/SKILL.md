@@ -1,0 +1,144 @@
+---
+name: review-plan
+description: Review a development plan for gaps, undocumented assumptions, missing constraints, and architectural risks before implementation begins. Use this skill after a dev-plan is created, when the user says "review plan", "audit plan", "check plan", or "/review-plan". Also trigger proactively whenever a dev-plan skill completes and produces a plan file — catching gaps before coding starts is far cheaper than discovering them mid-implementation.
+argument-hint: "[path/to/plan.md]"
+---
+
+# Review Plan: Independent Plan Audit
+
+Spawn a fresh-context subagent to audit a development plan before implementation begins. The subagent has no knowledge of the conversation that produced the plan — this is intentional. A reviewer who didn't write the plan catches what the author's blind spots miss.
+
+## Why This Exists
+
+Plans encode assumptions. Some are stated, most aren't. The author knows what they meant; a fresh reader sees only what's written. This skill exploits that gap: an independent agent reads the plan cold, explores the codebase to verify claims, and surfaces what's missing, ambiguous, or risky. Findings go back to the user for discussion — the plan is never modified automatically.
+
+## When to Run
+
+- **After `/dev-plan create`** — this is the primary trigger. Run automatically, blocking, before implementation starts.
+- **Manually via `/review-plan [path]`** — when the user wants to audit a plan mid-cycle or re-check after updates.
+- **Before `/fan-out`** — if a plan hasn't been reviewed yet, catch gaps before parallelizing work across agents.
+
+## Path Resolution
+
+1. If a path argument is provided, use it directly
+2. If no path is provided, scan `docs/dev_plans/` for the most recent `.md` file by modification time
+3. If triggered right after `/dev-plan`, the plan path is already in conversation context — use it
+4. If no plan is found, tell the user and ask for a path
+
+## Execution
+
+### Step 1: Read the Plan
+
+Read the full plan file. Extract:
+- The objective and requirements
+- The implementation checklist (phases, tasks)
+- Technical specifications (files to modify, interfaces, architecture decisions)
+- Integration seams (if present)
+- Acceptance criteria
+- Any stated constraints
+
+### Step 2: Spawn the Review Agent
+
+Spawn a single subagent with these characteristics:
+- **Type**: `general-purpose`
+- **Model**: `opus` (extended thinking is the point — invest tokens now to save rework later)
+- **Blocking**: Yes — wait for the result before continuing
+- **Context isolation**: The subagent gets ONLY the plan content and the codebase. It does NOT get the parent conversation history.
+
+Build the subagent prompt using this template:
+
+```
+You are an independent reviewer auditing a development plan before implementation begins.
+You have NOT been part of the conversation that produced this plan. This is intentional —
+your job is to catch what the author missed.
+
+## The Plan
+
+<plan>
+{{PLAN_CONTENT}}
+</plan>
+
+## Your Task
+
+Audit this plan by doing the following:
+
+1. **Read the plan carefully.** Understand the objective, requirements, tasks, and technical specs.
+
+2. **Explore the codebase.** Validate every assumption the plan makes:
+   - Do the files listed in "Files to Modify" actually exist? Are the paths correct?
+   - Do the APIs, functions, classes, or patterns referenced in the plan exist in the codebase?
+   - Does the project structure match what the plan assumes?
+   - Are the dependencies the plan relies on actually available?
+   - Check package.json / pyproject.toml / Cargo.toml etc. for dependency versions
+
+3. **Identify gaps.** Look for:
+   - **Undocumented assumptions** — things the plan takes for granted but doesn't state
+   - **Missing constraints** — limits, edge cases, or failure modes not addressed
+   - **Ambiguous requirements** — statements that could be interpreted multiple ways
+   - **Architectural risks** — patterns that conflict with the existing codebase, scaling concerns, or coupling issues
+   - **Sequencing problems** — tasks ordered wrong, or dependencies between "independent" tasks
+   - **Missing tasks** — work that's clearly needed but not listed (e.g., migrations, config changes, docs)
+   - **Testing gaps** — scenarios not covered by the testing plan
+   - **Integration seam risks** — boundaries where independently-built pieces must connect
+
+4. **Produce findings.** For each issue found, provide:
+   - **Category**: one of [Assumption, Constraint, Ambiguity, Risk, Sequencing, Missing Task, Testing Gap]
+   - **Severity**: Critical (blocks implementation), Important (likely causes rework), Minor (nice to address)
+   - **Finding**: What the issue is
+   - **Evidence**: What you found in the codebase that supports this finding
+   - **Suggestion**: A specific constraint, clarification, or task to add to the plan
+
+## Output Format
+
+Return your findings as a structured list. Start with a one-line summary of overall plan quality,
+then list findings grouped by severity (Critical first, then Important, then Minor).
+
+If the plan is solid and you find no significant issues, say so — don't manufacture findings.
+A clean review is a valid outcome.
+```
+
+Replace `{{PLAN_CONTENT}}` with the full text of the plan file.
+
+### Step 3: Present Findings
+
+When the subagent returns, present the findings to the user. Format them clearly:
+
+```markdown
+## Plan Review: [plan-file-name]
+
+**Overall**: [subagent's summary line]
+
+### Critical
+- **[Category]**: [Finding]
+  - Evidence: [what was found in codebase]
+  - Suggestion: [what to add/change in the plan]
+
+### Important
+- ...
+
+### Minor
+- ...
+
+---
+**Next steps**: Review these findings and decide which ones to incorporate into the plan.
+Update the plan with `/dev-plan update` for any accepted changes.
+```
+
+If the review is clean (no critical or important findings), say so concisely and proceed.
+
+### Step 4: Discussion
+
+Do NOT modify the plan automatically. The findings are a starting point for conversation:
+- The user may accept some findings and reject others
+- Some findings may need clarification or deeper investigation
+- Accepted findings should be incorporated via `/dev-plan update`
+
+Only after the user has reviewed and addressed the findings (or explicitly decided to proceed) should implementation begin.
+
+## Constraints
+
+- Never modify the plan file directly — findings drive a conversation, not automatic edits
+- The subagent must not receive parent conversation context — fresh eyes are the entire value
+- Use model `opus` for the subagent — the quality of analysis justifies the cost
+- This skill blocks — the user waits for the review before proceeding
+- If the plan references external systems (APIs, services, databases), note that the subagent can only verify what's in the codebase, not external availability
