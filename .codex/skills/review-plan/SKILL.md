@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: Review a development plan for gaps, undocumented assumptions, missing constraints, and architectural risks before implementation begins. Use this skill after a dev-plan is created, when the user says "review plan", "audit plan", "check plan", or "/review-plan". Also trigger proactively whenever a dev-plan skill completes and produces a plan file — catching gaps before coding starts is far cheaper than discovering them mid-implementation.
+description: "Review a development plan for gaps, undocumented assumptions, missing constraints, and architectural risks before implementation begins. Use this skill after a dev-plan is created, when the user says \"review plan\", \"audit plan\", \"check plan\", or \"/review-plan\". Also trigger proactively whenever a dev-plan skill completes and produces a plan file - catching gaps before coding starts is far cheaper than discovering them mid-implementation."
 argument-hint: "[path/to/plan.md]"
 ---
 
@@ -40,10 +40,11 @@ Read the full plan file. Extract:
 ### Step 2: Spawn the Review Agent
 
 Spawn a single subagent with these characteristics:
-- **Type**: `general-purpose`
-- **Model**: `opus` (extended thinking is the point — invest tokens now to save rework later)
-- **Blocking**: Yes — wait for the result before continuing
-- **Context isolation**: The subagent gets ONLY the plan content and the codebase. It does NOT get the parent conversation history.
+- **Agent type**: `explorer`
+- **Model**: `gpt-5.4`
+- **Reasoning effort**: `high` (invest the extra thinking here to save rework later)
+- **Blocking**: Yes - call `wait` on the agent ID before continuing
+- **Context isolation**: Keep `fork_context` unset or `false`. Pass only the plan content and the audit instructions in the prompt so the agent reviews the plan cold instead of inheriting the parent conversation.
 
 Build the subagent prompt using this template:
 
@@ -99,6 +100,19 @@ A clean review is a valid outcome.
 
 Replace `{{PLAN_CONTENT}}` with the full text of the plan file.
 
+When spawning the agent, use the Codex delegation tools directly:
+
+```text
+spawn_agent(
+  agent_type="explorer",
+  model="gpt-5.4",
+  reasoning_effort="high",
+  fork_context=false,
+  message="<filled prompt>"
+)
+wait(ids=["<agent-id>"])
+```
+
 ### Step 3: Present Findings
 
 When the subagent returns, present the findings to the user. Format them clearly:
@@ -137,8 +151,8 @@ Only after the user has reviewed and addressed the findings (or explicitly decid
 
 ## Constraints
 
-- Never modify the plan file directly — findings drive a conversation, not automatic edits
-- The subagent must not receive parent conversation context — fresh eyes are the entire value
-- Use model `opus` for the subagent — the quality of analysis justifies the cost
-- This skill blocks — the user waits for the review before proceeding
+- Never modify the plan file directly - findings drive a conversation, not automatic edits
+- The subagent must not receive parent conversation context - fresh eyes are the entire value
+- Use a real Codex agent configuration (`agent_type="explorer"`, `model="gpt-5.4"`, `reasoning_effort="high"`) instead of Claude-specific agent names
+- This skill blocks - the user waits for the review before proceeding
 - If the plan references external systems (APIs, services, databases), note that the subagent can only verify what's in the codebase, not external availability

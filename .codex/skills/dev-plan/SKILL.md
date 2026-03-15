@@ -71,6 +71,8 @@ Every plan must include these sections (see template.md for full format):
 2. Create plan with initial structure
 3. Define phases and acceptance criteria
 4. Identify files to modify and potential risks
+5. Run `/review-plan` to audit for gaps, undocumented assumptions, and missing constraints before coding starts
+6. Address review findings, then proceed to implementation (or `/fan-out` for parallel tasks)
 
 ### During Implementation
 1. Update checkboxes as tasks complete
