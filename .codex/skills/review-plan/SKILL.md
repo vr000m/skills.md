@@ -6,23 +6,23 @@ argument-hint: "[path/to/plan.md]"
 
 # Review Plan: Independent Plan Audit
 
-Spawn a fresh-context subagent to audit a development plan before implementation begins. The subagent has no knowledge of the conversation that produced the plan — this is intentional. A reviewer who didn't write the plan catches what the author's blind spots miss.
+Audit a development plan before implementation begins. Read the plan as if you were not part of the conversation that produced it - that fresh-reader posture is the point. Verify the written plan against the codebase instead of relying on unstated context from the parent conversation.
 
 ## Why This Exists
 
-Plans encode assumptions. Some are stated, most aren't. The author knows what they meant; a fresh reader sees only what's written. This skill exploits that gap: an independent agent reads the plan cold, explores the codebase to verify claims, and surfaces what's missing, ambiguous, or risky. Findings go back to the user for discussion — the plan is never modified automatically.
+Plans encode assumptions. Some are stated, most are not. The author knows what they meant; a fresh reader sees only what is written. This skill exploits that gap: review the plan cold, explore the codebase to verify claims, and surface what is missing, ambiguous, or risky. Findings go back to the user for discussion - the plan is never modified automatically.
 
 ## When to Run
 
-- **After `/dev-plan create`** — this is the primary trigger. Run automatically, blocking, before implementation starts.
-- **Manually via `/review-plan [path]`** — when the user wants to audit a plan mid-cycle or re-check after updates.
-- **Before `/fan-out`** — if a plan hasn't been reviewed yet, catch gaps before parallelizing work across agents.
+- **After `/dev-plan create`** - this is the primary trigger. Run automatically, blocking, before implementation starts.
+- **Manually via `/review-plan [path]`** - when the user wants to audit a plan mid-cycle or re-check after updates.
+- **Before `/fan-out`** - if a plan has not been reviewed yet, catch gaps before parallelizing work across agents.
 
 ## Path Resolution
 
 1. If a path argument is provided, use it directly
-2. If no path is provided, scan `docs/dev_plans/` for the most recent `.md` file by modification time
-3. If triggered right after `/dev-plan`, the plan path is already in conversation context — use it
+2. If no path is provided, scan `docs/dev_plans/` for the most recent plan file by modification time. Match the naming convention `YYYYMMDD-type-name.md` and exclude helper files such as `README.md`
+3. If triggered right after `/dev-plan`, the plan path is already in conversation context - use it
 4. If no plan is found, tell the user and ask for a path
 
 ## Execution
@@ -37,51 +37,28 @@ Read the full plan file. Extract:
 - Acceptance criteria
 - Any stated constraints
 
-### Step 2: Spawn the Review Agent
+### Step 2: Audit the Plan
 
-Spawn a single subagent with these characteristics:
-- **Agent type**: `explorer`
-- **Model**: `gpt-5.4`
-- **Reasoning effort**: `high` (invest the extra thinking here to save rework later)
-- **Blocking**: Yes - call `wait` on the agent ID before continuing
-- **Context isolation**: Keep `fork_context` unset or `false`. Pass only the plan content and the audit instructions in the prompt so the agent reviews the plan cold instead of inheriting the parent conversation.
+Run the audit in the current Codex session. Do not require `spawn_agent`; this skill must work in ordinary `/review-plan` runs where delegation has not been explicitly requested.
 
-Build the subagent prompt using this template:
-
-```
-You are an independent reviewer auditing a development plan before implementation begins.
-You have NOT been part of the conversation that produced this plan. This is intentional —
-your job is to catch what the author missed.
-
-## The Plan
-
-<plan>
-{{PLAN_CONTENT}}
-</plan>
-
-## Your Task
-
-Audit this plan by doing the following:
+Use this audit checklist:
 
 1. **Read the plan carefully.** Understand the objective, requirements, tasks, and technical specs.
-
 2. **Explore the codebase.** Validate every assumption the plan makes:
    - Do the files listed in "Files to Modify" actually exist? Are the paths correct?
    - Do the APIs, functions, classes, or patterns referenced in the plan exist in the codebase?
    - Does the project structure match what the plan assumes?
    - Are the dependencies the plan relies on actually available?
-   - Check package.json / pyproject.toml / Cargo.toml etc. for dependency versions
-
+   - Check `package.json`, `pyproject.toml`, `Cargo.toml`, and similar project files for dependency versions
 3. **Identify gaps.** Look for:
-   - **Undocumented assumptions** — things the plan takes for granted but doesn't state
-   - **Missing constraints** — limits, edge cases, or failure modes not addressed
-   - **Ambiguous requirements** — statements that could be interpreted multiple ways
-   - **Architectural risks** — patterns that conflict with the existing codebase, scaling concerns, or coupling issues
-   - **Sequencing problems** — tasks ordered wrong, or dependencies between "independent" tasks
-   - **Missing tasks** — work that's clearly needed but not listed (e.g., migrations, config changes, docs)
-   - **Testing gaps** — scenarios not covered by the testing plan
-   - **Integration seam risks** — boundaries where independently-built pieces must connect
-
+   - **Undocumented assumptions** - things the plan takes for granted but does not state
+   - **Missing constraints** - limits, edge cases, or failure modes not addressed
+   - **Ambiguous requirements** - statements that could be interpreted multiple ways
+   - **Architectural risks** - patterns that conflict with the existing codebase, scaling concerns, or coupling issues
+   - **Sequencing problems** - tasks ordered wrong, or dependencies between "independent" tasks
+   - **Missing tasks** - work that is clearly needed but not listed (for example migrations, config changes, or docs)
+   - **Testing gaps** - scenarios not covered by the testing plan
+   - **Integration seam risks** - boundaries where independently-built pieces must connect
 4. **Produce findings.** For each issue found, provide:
    - **Category**: one of [Assumption, Constraint, Ambiguity, Risk, Sequencing, Missing Task, Testing Gap]
    - **Severity**: Critical (blocks implementation), Important (likely causes rework), Minor (nice to address)
@@ -89,38 +66,19 @@ Audit this plan by doing the following:
    - **Evidence**: What you found in the codebase that supports this finding
    - **Suggestion**: A specific constraint, clarification, or task to add to the plan
 
-## Output Format
-
-Return your findings as a structured list. Start with a one-line summary of overall plan quality,
-then list findings grouped by severity (Critical first, then Important, then Minor).
-
-If the plan is solid and you find no significant issues, say so — don't manufacture findings.
-A clean review is a valid outcome.
-```
-
-Replace `{{PLAN_CONTENT}}` with the full text of the plan file.
-
-When spawning the agent, use the Codex delegation tools directly:
-
-```text
-spawn_agent(
-  agent_type="explorer",
-  model="gpt-5.4",
-  reasoning_effort="high",
-  fork_context=false,
-  message="<filled prompt>"
-)
-wait(ids=["<agent-id>"])
-```
+Treat the review as a cold read:
+- Base the audit on the plan text and what you verify in the repository
+- Do not rely on unstated details from the parent conversation
+- If the user explicitly asks for delegated review and the environment supports it, delegation is optional, not required. Use a supported high-reasoning Codex model from the current environment (for example `o3`) instead of hardcoding a stale model ID
 
 ### Step 3: Present Findings
 
-When the subagent returns, present the findings to the user. Format them clearly:
+Present the findings to the user. Format them clearly:
 
 ```markdown
 ## Plan Review: [plan-file-name]
 
-**Overall**: [subagent's summary line]
+**Overall**: [one-line summary of plan quality]
 
 ### Critical
 - **[Category]**: [Finding]
@@ -152,7 +110,7 @@ Only after the user has reviewed and addressed the findings (or explicitly decid
 ## Constraints
 
 - Never modify the plan file directly - findings drive a conversation, not automatic edits
-- The subagent must not receive parent conversation context - fresh eyes are the entire value
-- Use a real Codex agent configuration (`agent_type="explorer"`, `model="gpt-5.4"`, `reasoning_effort="high"`) instead of Claude-specific agent names
+- Review from the plan text and the codebase, not from unstated parent-conversation context
+- If you delegate, use a supported high-reasoning Codex model from the current environment instead of hardcoding a specific model ID in the skill
 - This skill blocks - the user waits for the review before proceeding
-- If the plan references external systems (APIs, services, databases), note that the subagent can only verify what's in the codebase, not external availability
+- If the plan references external systems (APIs, services, databases), note that the review can only verify what is in the codebase, not external availability

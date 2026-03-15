@@ -14,6 +14,15 @@
 - Update PR description to reflect final state of the work.
 - **Verify before marking done** — run tests, check logs, demonstrate correctness. Don't claim a task is complete without proof.
 
+## Skill Workflow
+
+Recommended development workflow using skills:
+
+1. `/dev-plan create feature xyz` — Create the plan
+2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
+3. Address review findings, update plan as needed
+4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
+
 ## Bug Fixing
 - When given a bug with clear signals (logs, errors, failing tests), fix it autonomously. Don't ask for hand-holding.
 

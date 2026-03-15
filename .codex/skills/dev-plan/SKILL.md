@@ -96,7 +96,6 @@ Every plan must include these sections (see template.md for full format):
 
 ## README.md Task Table
 
-Ensure `docs/dev_plans/README.md` exists and keep task tables updated:
-- Create the README if it does not exist
+If `docs/dev_plans/README.md` exists, update the task tables:
 - Move completed tasks to "Completed Tasks" table
 - Keep "Current Tasks" table up to date
