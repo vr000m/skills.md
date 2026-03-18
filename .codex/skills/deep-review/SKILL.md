@@ -141,6 +141,7 @@ Store the last run in `.deep-review/latest.json` so `--continue` can rerun only 
 Suggested schema:
 ```json
 {
+  "schema_version": 1,
   "run_id": "2026-03-17T14:30:00Z",
   "target_kind": "plan|pr|branch",
   "target_ref": "feature/deep-review",
@@ -160,6 +161,8 @@ Suggested schema:
 
 `--continue` rules:
 - If the state file is missing, fall back to `--full`
+- If `schema_version` is absent or does not match the current expected version (`1`), warn and fall
+  back to `--full`
 - If `base_commit`, `head_commit`, or `diff_hash` no longer match the current target, warn and fall
   back to `--full`
 - If the snapshot matches, rerun only `timed_out` or `errored` lenses and merge them with the saved
@@ -195,7 +198,8 @@ dismissed patterns using the strict bullet format below:
 Matching rules:
 - Match by category and disposition first
 - Compare the normalized description against the finding text
-- Do not suppress if the match is too vague or the checklist entry is stale
+- Suppress only when the checklist description matches the finding's file path, named symbol, or
+  specific pattern — not when it matches only a category-level description
 
 If repo-root `AGENTS.md` or the `## Review Checklist` section is missing, continue without
 suppression.
