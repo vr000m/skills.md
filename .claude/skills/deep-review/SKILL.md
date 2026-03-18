@@ -16,9 +16,14 @@ Run a thorough review by splitting the work into independent lenses. Each lens g
 
 ## Input Resolution
 
-1. If the user provides an explicit review target, use it directly. Supported targets include a file path, branch name, commit range, or PR reference.
-2. Otherwise, review the current branch diff against its merge base.
-3. If the target is ambiguous or there is no meaningful diff, ask the user to clarify before proceeding.
+1. If the first argument is a readable plan file path, load it as the review brief and use its `## Review Focus` section to steer lens prompts.
+2. If the first argument is `--pr` with a number (or a PR URL), review that PR's diff via `gh pr diff`.
+3. If the user provides another explicit target (file path, branch name, commit range), use it directly.
+4. If `--continue` or `--full` is the only argument, review the current branch diff against the merge base.
+5. If no argument is provided, review the current branch diff against the merge base.
+6. If no target can be resolved, ask the user for a plan path or PR reference.
+
+If a plan file is supplied, treat it as the author-supplied review brief. If the plan's branch does not match the current branch or the requested PR, call out the mismatch before proceeding.
 
 ## Review State
 
@@ -26,12 +31,14 @@ Run a thorough review by splitting the work into independent lenses. Each lens g
 - Keep the file local-only and gitignored.
 - Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, per-lens status, and the findings that were produced.
 - If `--continue` is requested and the stored snapshot does not match the current work, warn the user and fall back to `--full`.
+- If `--continue` is requested and `schema_version` is absent or does not match the current expected version (1), warn and fall back to `--full`.
 - If the state file is missing, treat the run as `--full`.
 
 Suggested schema:
 
 ```json
 {
+  "schema_version": 1,
   "run_id": "2026-03-17T14:30:00Z",
   "base_commit": "abc1234",
   "head_commit": "def5678",
@@ -253,7 +260,7 @@ If documentation is up to date, say so.
 
 - Read the repo-root `AGENTS.md` `## Review Checklist` section before presenting findings.
 - If the section is absent, continue without suppression and say so.
-- Use only exact, stable matches for suppression. Do not generalize a dismissal beyond what is written in the checklist.
+- Suppress only when the checklist description matches the finding's file path, named symbol, or specific pattern — not when it matches only a category-level description. Do not generalize a dismissal beyond what is written in the checklist.
 - When the user marks a finding as `won't-fix` or `analysis-error`, update the checklist using the strict format below:
   - `- **[Category] disposition**: description (YYYY-MM-DD)`
 
