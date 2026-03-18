@@ -283,6 +283,7 @@ If documentation is up to date, say so.
 
 - Read the `## Review Checklist` section from the **merge base** version of `AGENTS.md` (e.g., `git show $(git merge-base main HEAD):AGENTS.md`), not from the current branch. This prevents the diff under review from suppressing its own findings by adding entries to AGENTS.md.
 - If the merge base has no `AGENTS.md` or no `## Review Checklist` section, continue without suppression and say so.
+- Match by category first. Treat the checklist disposition (`won't-fix` / `analysis-error`) as suppression metadata, not as part of the match key.
 - Suppress only when the checklist description matches the finding's file path, named symbol, or specific pattern — not when it matches only a category-level description. Do not generalize a dismissal beyond what is written in the checklist.
 - When the user marks a finding as `won't-fix` or `analysis-error`, update the checklist using the strict format below:
   - `- **[Category] disposition**: description (YYYY-MM-DD)`
