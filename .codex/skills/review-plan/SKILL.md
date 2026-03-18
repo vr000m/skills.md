@@ -35,6 +35,7 @@ Read the full plan file. Extract:
 - Technical specifications (files to modify, interfaces, architecture decisions)
 - Integration seams (if present)
 - Acceptance criteria
+- Review Focus (if present)
 - Any stated constraints
 
 ### Step 2: Audit the Plan
@@ -44,6 +45,8 @@ Run the audit in the current Codex session. Do not require `spawn_agent`; this s
 Use this audit checklist:
 
 1. **Read the plan carefully.** Understand the objective, requirements, tasks, and technical specs.
+   If the plan has a `## Review Focus` section, treat it as explicit review scope and verify that any
+   listed specs, RFCs, or risk areas are concrete enough for downstream review tooling to use.
 2. **Explore the codebase.** Validate every assumption the plan makes:
    - Do the files listed in "Files to Modify" actually exist? Are the paths correct?
    - Do the APIs, functions, classes, or patterns referenced in the plan exist in the codebase?

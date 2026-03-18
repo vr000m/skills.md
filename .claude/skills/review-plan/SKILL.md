@@ -33,6 +33,7 @@ Read the full plan file. Extract:
 - The objective and requirements
 - The implementation checklist (phases, tasks)
 - Technical specifications (files to modify, interfaces, architecture decisions)
+- Review Focus (if present, including any explicit spec or RFC references)
 - Integration seams (if present)
 - Acceptance criteria
 - Any stated constraints
@@ -58,6 +59,10 @@ your job is to catch what the author missed.
 {{PLAN_CONTENT}}
 </plan>
 
+## Review Focus
+
+{{REVIEW_FOCUS}}
+
 ## Your Task
 
 Audit this plan by doing the following:
@@ -70,6 +75,7 @@ Audit this plan by doing the following:
    - Does the project structure match what the plan assumes?
    - Are the dependencies the plan relies on actually available?
    - Check package.json / pyproject.toml / Cargo.toml etc. for dependency versions
+   - If the plan includes a `Review Focus` section, use it as the authoritative source for extra constraints and spec/RFC references.
 
 3. **Identify gaps.** Look for:
    - **Undocumented assumptions** — things the plan takes for granted but doesn't state
@@ -97,7 +103,8 @@ If the plan is solid and you find no significant issues, say so — don't manufa
 A clean review is a valid outcome.
 ```
 
-Replace `{{PLAN_CONTENT}}` with the full text of the plan file.
+Replace `{{PLAN_CONTENT}}` with the full text of the plan file. Replace `{{REVIEW_FOCUS}}`
+with the extracted `## Review Focus` content, or `None provided.` when the section is absent.
 
 ### Step 3: Present Findings
 

@@ -32,6 +32,14 @@ Use this template when creating new development plans.
 - Requirement 2
 - Requirement 3
 
+## Review Focus
+
+[Optional review criteria for `/review-plan` and `/deep-review`. Include spec or RFC references here if they matter.]
+
+- Focus item 1
+- Focus item 2
+- RFC/spec references, if applicable
+
 ## Implementation Checklist
 
 ### Phase 1: [Phase Name]

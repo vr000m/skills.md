@@ -1,0 +1,300 @@
+---
+name: deep-review
+description: Thorough multi-lens code review using parallel subagents with clean context. Spawns independent reviewers for logic, security, spec compliance, architecture, and documentation — catching issues that single-pass reviews miss. Use when the user says "deep review", "thorough review", "audit code", or "/deep-review". Complements built-in /review and /security-review.
+argument-hint: "[path/to/review-target|PR] [--full] [--continue]"
+---
+
+# Deep Review: Multi-Lens Code Audit
+
+Run a thorough review by splitting the work into independent lenses. Each lens gets fresh context, a narrow scope, and a clear output format. The goal is to catch bugs, security issues, spec mismatches, architecture regressions, and documentation drift that a single-pass review may miss.
+
+## When to Run
+
+- After implementation and before merge
+- When the user explicitly asks for a thorough code review
+- When a previous run failed or timed out and `--continue` is requested
+
+## Input Resolution
+
+1. If the user provides an explicit review target, use it directly. Supported targets include a file path, branch name, commit range, or PR reference.
+2. Otherwise, review the current branch diff against its merge base.
+3. If the target is ambiguous or there is no meaningful diff, ask the user to clarify before proceeding.
+
+## Review State
+
+- Persist the latest run in `.deep-review/latest.json`.
+- Keep the file local-only and gitignored.
+- Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, per-lens status, and the findings that were produced.
+- If `--continue` is requested and the stored snapshot does not match the current work, warn the user and fall back to `--full`.
+- If the state file is missing, treat the run as `--full`.
+
+Suggested schema:
+
+```json
+{
+  "run_id": "2026-03-17T14:30:00Z",
+  "base_commit": "abc1234",
+  "head_commit": "def5678",
+  "diff_hash": "sha256:...",
+  "lenses": {
+    "logic": { "status": "completed", "model": "opus", "findings": [] },
+    "security": { "status": "timed_out", "model": "opus", "findings": [] },
+    "spec": { "status": "skipped", "reason": "no specs in Review Focus" },
+    "architecture": { "status": "completed", "model": "sonnet", "findings": [] },
+    "documentation": { "status": "completed", "model": "haiku", "findings": [] }
+  }
+}
+```
+
+## Lens Model Tiers
+
+Use the smallest model that still fits the lens, but keep the tiering stable:
+
+| Lens | Model |
+|------|-------|
+| Logic | opus |
+| Security | opus |
+| Spec compliance | opus |
+| Architecture | sonnet |
+| Documentation | haiku |
+
+## Workflow
+
+### 1. Confirm Cost
+
+Before spawning anything, show the user exactly which lenses will run and which model each lens will use. If the spec compliance lens is skipped because the plan has no `## Review Focus` specs or RFCs, say that explicitly. Ask for confirmation and wait.
+
+### 2. Spawn Fresh-Context Subagents
+
+Use the Agent tool to spawn one subagent per enabled lens. Each subagent must be given only the target codebase, the relevant diff or plan context, and the lens instructions below. Do not pass parent conversation history. Do not create worktrees for this review flow.
+
+Each lens prompt must be self-contained. It must state what to look for, what to ignore, and the expected output format. Use the templates below, replacing `{{DIFF}}` with the diff content, `{{REVIEW_CHECKLIST}}` with the AGENTS.md Review Checklist section (or "None available."), and `{{REVIEW_FOCUS}}` with the dev-plan Review Focus section (or "None provided.").
+
+#### Logic Lens (model: opus)
+
+```
+You are a logic reviewer. You have NOT seen the conversation that produced this code.
+Review ONLY for logic correctness — ignore style, naming, docs, and security.
+
+## Diff to Review
+{{DIFF}}
+
+## Review Checklist (previously dismissed — do NOT re-flag)
+{{REVIEW_CHECKLIST}}
+
+## Review Focus (author-specified criteria)
+{{REVIEW_FOCUS}}
+
+## Look For
+- Off-by-one errors, boundary conditions
+- Edge cases: empty inputs, null/None, zero-length, max values
+- Error handling: uncaught exceptions, swallowed errors, missing cleanup
+- Race conditions, deadlocks, TOCTOU
+- Resource leaks: unclosed files/connections/handles
+- Incorrect state transitions
+- Logic that silently does the wrong thing (no error, wrong result)
+
+## Ignore
+- Code style, naming (Architecture lens)
+- Security vulnerabilities (Security lens)
+- Documentation gaps (Documentation lens)
+- Spec compliance (Spec lens)
+
+## Output
+For each finding: **Severity** (Critical/Important/Minor), **Category** (Logic),
+**Location** (file_path:line), **Finding**, **Evidence**, **Suggestion**.
+If the code is logically sound, say so. Do not manufacture findings.
+```
+
+#### Security Lens (model: opus)
+
+```
+You are a security reviewer. You have NOT seen the conversation that produced this code.
+Review ONLY for security issues — ignore logic correctness, style, and docs.
+
+## Diff to Review
+{{DIFF}}
+
+## Review Checklist (previously dismissed — do NOT re-flag)
+{{REVIEW_CHECKLIST}}
+
+## Review Focus (author-specified criteria)
+{{REVIEW_FOCUS}}
+
+## Look For
+- OWASP Top 10: injection (SQL, command, XSS), broken auth, sensitive data exposure
+- Input validation: untrusted data used without sanitization
+- Secrets: hardcoded credentials, API keys, tokens in code or config
+- Auth/authz: missing permission checks, privilege escalation
+- Cryptography: weak algorithms, hardcoded IVs/salts, improper random
+- File operations: path traversal, symlink attacks, temp file races
+- Deserialization: untrusted data deserialized without validation
+
+## Ignore
+- Logic bugs not security-relevant (Logic lens)
+- Code style (Architecture lens)
+- Documentation (Documentation lens)
+
+## Output
+For each finding: **Severity** (Critical/Important/Minor), **Category** (Security),
+**Location** (file_path:line), **Finding**, **Evidence** (attack vector), **Suggestion** (mitigation).
+If no security issues, say so. Do not manufacture findings.
+```
+
+#### Spec Compliance Lens (model: opus) — only when Review Focus lists specs
+
+```
+You are a spec compliance reviewer. You have NOT seen the conversation that produced this code.
+Review ONLY for compliance with the referenced specifications.
+
+## Diff to Review
+{{DIFF}}
+
+## Specifications to Check Against
+{{REVIEW_FOCUS}}
+
+## Review Checklist (previously dismissed — do NOT re-flag)
+{{REVIEW_CHECKLIST}}
+
+## Instructions
+1. For each spec/RFC listed in Review Focus, search for the actual specification text
+2. Identify MUST/SHOULD/MAY requirements (RFC 2119) relevant to the diff
+3. Check whether the code satisfies those requirements
+4. Flag deviations with the specific spec section reference
+
+## Ignore
+- Implementation quality beyond spec compliance (other lenses handle this)
+- Specs not listed in Review Focus — do NOT expand scope
+
+## Output
+For each finding: **Severity** (Critical=violates MUST / Important=violates SHOULD / Minor=misses MAY),
+**Category** (Spec), **Location** (file_path:line), **Finding** (requirement not met),
+**Evidence** (exact spec section and RFC 2119 keyword), **Suggestion** (what to change).
+If the code complies with all referenced specs, say so.
+```
+
+#### Architecture Lens (model: sonnet)
+
+```
+You are an architecture reviewer. You have NOT seen the conversation that produced this code.
+Review ONLY for architectural concerns — ignore logic bugs, security, and docs.
+
+## Diff to Review
+{{DIFF}}
+
+## Review Checklist (previously dismissed — do NOT re-flag)
+{{REVIEW_CHECKLIST}}
+
+## Review Focus (author-specified criteria)
+{{REVIEW_FOCUS}}
+
+## Look For
+- Coupling: tight coupling between components that should be independent
+- API surface: breaking changes, inconsistent interfaces, missing abstractions
+- Backward compatibility: will this break existing callers?
+- Naming: misleading names, inconsistent conventions
+- Patterns: does new code follow or conflict with existing project patterns?
+- Complexity: over-engineering, unnecessary abstractions, premature optimization
+- Dependency direction: circular dependencies, wrong-layer imports
+
+## Ignore
+- Logic bugs (Logic lens)
+- Security vulnerabilities (Security lens)
+- Documentation (Documentation lens)
+
+## Output
+For each finding: **Severity** (Critical/Important/Minor), **Category** (Architecture),
+**Location** (file_path:line), **Finding**, **Evidence** (pattern/convention violated), **Suggestion**.
+If the architecture is sound, say so. Do not manufacture findings.
+```
+
+#### Documentation Lens (model: haiku)
+
+```
+You are a documentation reviewer. You have NOT seen the conversation that produced this code.
+Review ONLY for documentation gaps — ignore code quality, security, and logic.
+
+## Diff to Review
+{{DIFF}}
+
+## Review Checklist (previously dismissed — do NOT re-flag)
+{{REVIEW_CHECKLIST}}
+
+## Review Focus (author-specified criteria)
+{{REVIEW_FOCUS}}
+
+## Look For
+- README not updated for new features or changed behavior
+- AGENTS.md missing coverage for new patterns or conventions
+- Dev plan doesn't match what was actually implemented (drift)
+- API changes without corresponding doc updates
+- New config options or env vars without documentation
+- Examples referencing changed/removed APIs
+- Missing changelog entry
+
+## Ignore
+- Code quality, style, logic (other lenses handle this)
+- Minor typos in comments within the diff
+
+## Output
+For each finding: **Severity** (Critical/Important/Minor), **Category** (Documentation),
+**Location** (file_path or "missing file"), **Finding**, **Evidence** (what changed that makes this stale),
+**Suggestion** (specific doc update needed).
+If documentation is up to date, say so.
+```
+
+### 3. Deduplicate Findings
+
+- If multiple lenses flag the same file:line, keep the highest-severity finding and note the overlap.
+- If the same issue appears in more than one lens, treat that as corroboration, not as separate findings.
+- Sort the final list by severity before presenting it.
+
+### 4. Apply Suppression
+
+- Read the repo-root `AGENTS.md` `## Review Checklist` section before presenting findings.
+- If the section is absent, continue without suppression and say so.
+- Use only exact, stable matches for suppression. Do not generalize a dismissal beyond what is written in the checklist.
+- When the user marks a finding as `won't-fix` or `analysis-error`, update the checklist using the strict format below:
+  - `- **[Category] disposition**: description (YYYY-MM-DD)`
+
+Supported categories are `Logic`, `Security`, `Spec`, `Architecture`, and `Documentation`.
+
+### 5. Present Findings
+
+Return findings in a structured report:
+
+```markdown
+## Deep Review: [target]
+
+**Overall**: [one-line summary]
+
+### Critical
+- **[Category]**: [Finding]
+  - Evidence: [what was verified in the codebase]
+  - Suggestion: [specific plan or code change]
+
+### Important
+- ...
+
+### Minor
+- ...
+
+---
+**Next steps**: Review the findings, decide which ones to keep, and update the plan or code accordingly.
+```
+
+If the review is clean, say so concisely and call out any residual risks or skipped lenses.
+
+## Deep Review Rules
+
+- Keep every lens independent.
+- Do not reuse the parent conversation as context for the subagents.
+- Do not guess about specs or RFCs. The spec compliance lens only runs when the plan explicitly names them in `## Review Focus`.
+- If no `AGENTS.md` or no `## Review Checklist` section exists, proceed gracefully and note that no suppression source was available.
+- If `--continue` is requested, rerun only failed or timed-out lenses and merge the new findings with the previous run.
+- If `--full` is requested, ignore prior run state and start fresh.
+- Findings must include severity, category, file:line, evidence, and a concrete suggestion.
+- Triage outcomes are:
+  - `fix`
+  - `won't-fix` with a reason
+  - `analysis-error` with a correction

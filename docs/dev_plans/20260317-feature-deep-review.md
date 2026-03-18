@@ -2,7 +2,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Not Started |
+| **Status** | In Progress |
 | **Priority** | High |
 | **Branch** | `feature/deep-review` |
 | **Created** | 2026-03-17 |
@@ -34,59 +34,59 @@ gstack (github.com/garrytan/gstack) demonstrates the value of cognitive mode sep
 ## Implementation Checklist
 
 ### Phase 1: Core skill — `.claude/skills/deep-review/SKILL.md`
-- [ ] Create skill file with frontmatter (name, description, argument-hint)
-- [ ] Define input resolution: explicit path/PR > current branch diff > ask user
-- [ ] Define 5 review lenses with per-lens subagent prompts:
-  - [ ] **Logic lens** (model: opus): off-by-one, edge cases, error handling, race conditions, resource leaks
-  - [ ] **Security lens** (model: opus): OWASP top 10, input validation, secrets exposure, auth/authz
-  - [ ] **Spec compliance lens** (model: opus): RFC/standard conformance — only runs when dev-plan `## Review Focus` lists specs/RFCs
-  - [ ] **Architecture lens** (model: sonnet): coupling, API surface, backward compat, naming, patterns
-  - [ ] **Documentation lens** (model: haiku): stale docs, missing coverage, plan-vs-implementation drift, README/AGENTS.md gaps
-- [ ] Define finding format: severity (Critical/Important/Minor), category, file:line, evidence, suggestion
-- [ ] Define triage flow: findings → main context → fix / won't-fix (+ why) / analysis-error (+ correction)
-- [ ] Define feedback loop: won't-fix and analysis-error outcomes update AGENTS.md `## Review Checklist`
-- [ ] Define suppression: before presenting, check AGENTS.md `## Review Checklist` for previously-dismissed patterns
-- [ ] Define deduplication: when multiple lenses flag the same file:line, keep the higher-severity finding and note the overlap
-- [ ] Define `--continue` flag: retry only lenses that failed/timed out in the previous run, merge with prior results
-- [ ] Define `--full` flag (default): run all lenses fresh
-- [ ] Define persisted run state: `.deep-review/latest.json` (gitignored) stores lens status, findings, snapshot identity (base/head commits, diff hash), and run metadata for `--continue`
-- [ ] Add `.deep-review/` to `.gitignore`
-- [ ] Define cost confirmation: before spawning, show user which lenses will run with which models, ask to proceed
-- [ ] Subagent mechanism: use Claude Code's built-in Agent tool (like `/review-plan`), NOT CLI spawning — no worktrees needed since all lenses review the same codebase in place
+- [x] Create skill file with frontmatter (name, description, argument-hint)
+- [x] Define input resolution: explicit path/PR > current branch diff > ask user
+- [x] Define 5 review lenses with per-lens subagent prompts:
+  - [x] **Logic lens** (model: opus): off-by-one, edge cases, error handling, race conditions, resource leaks
+  - [x] **Security lens** (model: opus): OWASP top 10, input validation, secrets exposure, auth/authz
+  - [x] **Spec compliance lens** (model: opus): RFC/standard conformance — only runs when dev-plan `## Review Focus` lists specs/RFCs
+  - [x] **Architecture lens** (model: sonnet): coupling, API surface, backward compat, naming, patterns
+  - [x] **Documentation lens** (model: haiku): stale docs, missing coverage, plan-vs-implementation drift, README/AGENTS.md gaps
+- [x] Define finding format: severity (Critical/Important/Minor), category, file:line, evidence, suggestion
+- [x] Define triage flow: findings → main context → fix / won't-fix (+ why) / analysis-error (+ correction)
+- [x] Define feedback loop: won't-fix and analysis-error outcomes update AGENTS.md `## Review Checklist`
+- [x] Define suppression: before presenting, check AGENTS.md `## Review Checklist` for previously-dismissed patterns
+- [x] Define deduplication: when multiple lenses flag the same file:line, keep the higher-severity finding and note the overlap
+- [x] Define `--continue` flag: retry only lenses that failed/timed out in the previous run, merge with prior results
+- [x] Define `--full` flag (default): run all lenses fresh
+- [x] Define persisted run state: `.deep-review/latest.json` (gitignored) stores lens status, findings, snapshot identity (base/head commits, diff hash), and run metadata for `--continue`
+- [x] Add `.deep-review/` to `.gitignore`
+- [x] Define cost confirmation: before spawning, show user which lenses will run with which models, ask to proceed
+- [x] Subagent mechanism: use Claude Code's built-in Agent tool (like `/review-plan`), NOT CLI spawning — no worktrees needed since all lenses review the same codebase in place
 
 ### Phase 2: Dev-plan template update
-- [ ] Add `## Review Focus` section to `.claude/skills/dev-plan/template.md`
-- [ ] Section is optional but encouraged — author-specified criteria that `/deep-review` and `/review-plan` consume
-- [ ] Must include spec/RFC references if applicable (this is how the spec compliance lens knows to activate)
-- [ ] Examples: "SDP must comply with RFC 3264", "no plaintext credentials in signaling", "backward compat with v2 API"
+- [x] Add `## Review Focus` section to `.claude/skills/dev-plan/template.md`
+- [x] Section is optional but encouraged — author-specified criteria that `/deep-review` and `/review-plan` consume
+- [x] Must include spec/RFC references if applicable (this is how the spec compliance lens knows to activate)
+- [x] Examples: "SDP must comply with RFC 3264", "no plaintext credentials in signaling", "backward compat with v2 API"
 
 ### Phase 3: AGENTS.md convention
-- [ ] Document that repos should add `## Review Checklist` to their repo-root AGENTS.md
-- [ ] Checklist contains: project-specific gotchas, known false positives, won't-fix patterns with reasons
-- [ ] `/deep-review` reads this section; triage outcomes update it
-- [ ] Add initial `## Review Checklist` section to this repo's AGENTS.md as an example
-- [ ] Strict format: `- **[Category] disposition**: description (date)` — one finding per bullet, stable wording, machine-parseable for reliable suppression by both Claude and Codex
+- [x] Document that repos should add `## Review Checklist` to their repo-root AGENTS.md
+- [x] Checklist contains: project-specific gotchas, known false positives, won't-fix patterns with reasons
+- [x] `/deep-review` reads this section; triage outcomes update it
+- [x] Add initial `## Review Checklist` section to this repo's AGENTS.md as an example
+- [x] Strict format: `- **[Category] disposition**: description (date)` — one finding per bullet, stable wording, machine-parseable for reliable suppression by both Claude and Codex
 
 ### Phase 4: Script integration
-- [ ] Add `deep-review` to `MANAGED_SKILLS` in `promote-skills.sh`
-- [ ] Add `deep-review` to `MANAGED_SKILLS` in `sync-skills.sh`
-- [ ] Add `deep-review` to `MANAGED_SKILLS` in `bootstrap-skills.sh`
-- [ ] Add `deep-review` to `MANAGED_SKILLS` in `check-sync.sh`
-- [ ] Add `deep-review` to `.env.example`
+- [x] Add `deep-review` to `MANAGED_SKILLS` in `promote-skills.sh`
+- [x] Add `deep-review` to `MANAGED_SKILLS` in `sync-skills.sh`
+- [x] Add `deep-review` to `MANAGED_SKILLS` in `bootstrap-skills.sh`
+- [x] Add `deep-review` to `MANAGED_SKILLS` in `check-sync.sh`
+- [x] Add `deep-review` to `.env.example`
 
 ### Phase 5: Documentation
-- [ ] Add `deep-review` row to README.md skills table
-- [ ] Update repo-root AGENTS.md skill workflow section (add `/deep-review` after implementation, before merge)
-- [ ] Update dev_plans/README.md with this plan entry
+- [x] Add `deep-review` row to README.md skills table
+- [x] Update repo-root AGENTS.md skill workflow section (add `/deep-review` after implementation, before merge)
+- [x] Update dev_plans/README.md with this plan entry
 
 ### Phase 6: Codex tasks (Codex handles independently)
 Codex should independently create/update the following to match its own harness conventions:
-- [ ] Create `.codex/skills/deep-review/SKILL.md` — adapted from Claude version for Codex's model/platform
-- [ ] Update `.codex/skills/dev-plan/template.md` — add `## Review Focus` section
-- [ ] Update `.codex/skills/dev-plan/SKILL.md` — mention `## Review Focus` as a section to produce when creating plans (template alone isn't enough if SKILL.md doesn't reference it)
-- [ ] Update `.codex/skills/review-plan/SKILL.md` — add `## Review Focus` to the extraction list so `/review-plan` consumes author-specified spec/RFC criteria
-- [ ] Update `.codex/AGENTS.md` — add `/deep-review` to Skill Workflow section
-- [ ] Use Codex-appropriate model IDs (not Claude model names)
+- [x] Create `.codex/skills/deep-review/SKILL.md` — adapted from Claude version for Codex's model/platform
+- [x] Update `.codex/skills/dev-plan/template.md` — add `## Review Focus` section
+- [x] Update `.codex/skills/dev-plan/SKILL.md` — mention `## Review Focus` as a section to produce when creating plans (template alone isn't enough if SKILL.md doesn't reference it)
+- [x] Update `.codex/skills/review-plan/SKILL.md` — add `## Review Focus` to the extraction list so `/review-plan` consumes author-specified spec/RFC criteria
+- [x] Update `.codex/AGENTS.md` — add `/deep-review` to Skill Workflow section
+- [x] Use Codex-appropriate model IDs (not Claude model names)
 
 **Note:** Do not directly edit `.codex/skills/` — it's a mirror managed by sync scripts. Codex handles its own side.
 
@@ -236,14 +236,14 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 
 ## Review Focus
 
-- [ ] Subagent prompts must be self-contained — no references to parent context
-- [ ] Each lens prompt must specify what to look for AND what to ignore (scope boundaries)
-- [ ] Finding deduplication logic must handle overlapping categories (e.g., a security issue that's also a logic issue)
-- [ ] AGENTS.md changes must not break existing sections or sync workflow
-- [ ] Dev-plan template change must be backward compatible (Review Focus is optional)
-- [ ] The skill must work on repos that have no AGENTS.md or no Review Checklist section (graceful degradation)
-- [ ] Spec compliance lens must NOT guess — only activates when Review Focus explicitly lists specs/RFCs
-- [ ] Cost confirmation must appear before spawning subagents
+- [x] Subagent prompts must be self-contained — no references to parent context
+- [x] Each lens prompt must specify what to look for AND what to ignore (scope boundaries)
+- [x] Finding deduplication logic must handle overlapping categories (e.g., a security issue that's also a logic issue)
+- [x] AGENTS.md changes must not break existing sections or sync workflow
+- [x] Dev-plan template change must be backward compatible (Review Focus is optional)
+- [x] The skill must work on repos that have no AGENTS.md or no Review Checklist section (graceful degradation)
+- [x] Spec compliance lens must NOT guess — only activates when Review Focus explicitly lists specs/RFCs
+- [x] Cost confirmation must appear before spawning subagents
 
 ## Testing Notes
 
@@ -256,6 +256,16 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 6. Verify partial failure: simulate a lens timeout, confirm partial results presented with note
 7. Verify `--continue`: after partial failure, run with `--continue`, confirm only failed lenses re-run
 8. Verify cost confirmation: confirm user sees lens/model breakdown before spawning
+
+### Verification run
+- [x] `just lint-scripts`
+- [x] `git diff --check`
+- [x] `./scripts/bootstrap-skills.sh --yes --force` with temp global directories
+- [x] `./scripts/promote-skills.sh --yes` with temp global directories
+- [x] `./scripts/sync-skills.sh` with temp global directories
+- [x] `./scripts/check-sync.sh` with temp global directories
+- [x] Verified `.claude/skills/deep-review/SKILL.md` and `.codex/skills/deep-review/SKILL.md` exist in the repo
+- [ ] Live `/deep-review` slash-command smoke run in Claude Code and Codex sessions
 
 ## Issues & Solutions
 
@@ -313,12 +323,12 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 - [ ] Previously-dismissed patterns (from AGENTS.md Review Checklist) are suppressed with a note
 - [ ] Triage outcomes can be recorded in AGENTS.md Review Checklist
 - [ ] Works on repos without AGENTS.md Review Checklist (graceful degradation)
-- [ ] Dev-plan template includes optional Review Focus section
+- [x] Dev-plan template includes optional Review Focus section
 - [ ] Spec compliance lens only activates when Review Focus lists specs/RFCs
 - [ ] Cost confirmation shown before spawning subagents
 - [ ] `--continue` retries only failed lenses and merges with prior results
-- [ ] Skill syncs correctly via promote/sync/bootstrap/check-sync scripts
-- [ ] Codex has equivalent skill adapted to its own harness (Codex handles independently)
+- [x] Skill syncs correctly via promote/sync/bootstrap/check-sync scripts
+- [x] Codex has equivalent skill adapted to its own harness (Codex handles independently)
 
 ## Final Results
 
