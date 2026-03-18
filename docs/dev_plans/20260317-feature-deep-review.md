@@ -64,7 +64,7 @@ gstack (github.com/garrytan/gstack) demonstrates the value of cognitive mode sep
 - [ ] Checklist contains: project-specific gotchas, known false positives, won't-fix patterns with reasons
 - [ ] `/deep-review` reads this section; triage outcomes update it
 - [ ] Add initial `## Review Checklist` section to this repo's AGENTS.md as an example
-- [ ] Format: bullet list with `- **[Category]**: [pattern] — [reason] (added YYYY-MM-DD)`
+- [ ] Strict format: `- **[Category] disposition**: description (date)` — one finding per bullet, stable wording, machine-parseable for reliable suppression by both Claude and Codex
 
 ### Phase 4: Script integration
 - [ ] Add `deep-review` to `MANAGED_SKILLS` in `promote-skills.sh`
@@ -194,13 +194,21 @@ When multiple lenses flag the same file:line:
 - Don't present the same issue twice
 
 **Dismissed pattern storage:**
-Dismissed patterns live in repo-root AGENTS.md `## Review Checklist`, not in separate memory files. Format:
+Dismissed patterns live in repo-root AGENTS.md `## Review Checklist`, not in separate memory files.
+
+Strict format — one finding per bullet, machine-parseable for reliable suppression:
 ```markdown
 ## Review Checklist
-- **[Security]**: Won't fix — raw SQL in migration scripts is intentional (added 2026-03-17)
-- **[Architecture]**: Analysis error — singleton pattern in transport.py is by design, not a coupling issue (added 2026-03-17)
+- **[Security] won't-fix**: raw SQL in migration scripts is intentional (2026-03-17)
+- **[Architecture] analysis-error**: singleton in transport.py is by design, not coupling (2026-03-17)
 ```
-This keeps all project knowledge in one place (AGENTS.md) rather than split across AGENTS.md + memory files.
+Pattern: `**[Category] disposition**: description (date)`
+- Category: one of Logic, Security, Spec, Architecture, Documentation
+- Disposition: one of `won't-fix`, `analysis-error`
+- Description: stable wording, specific enough to match future findings
+- Date: ISO date when added
+
+This keeps all project knowledge in one place (AGENTS.md) rather than split across AGENTS.md + memory files. The strict format ensures both Claude and Codex can reliably grep and suppress matching patterns.
 
 **Relationship to existing skills:**
 ```
