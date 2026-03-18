@@ -8,7 +8,7 @@
 - Discuss and plan before implementing non-trivial features.
 - **If an approach is failing, stop and re-plan** — don't keep pushing on a broken path.
 - Update docs (AGENTS.md, README.md, dev plan) alongside code changes, not after.
-- Run `/update-docs`, `/review`, and `/security-review` before merging.
+- Run `/update-docs`, `/review`, `/security-review`, and `/deep-review` before merging.
 - Fix all review findings before merge.
 - Update PR description to reflect final state of the work.
 - **Verify before marking done** — run tests, check logs, demonstrate correctness. Don't claim a task is complete without proof.
