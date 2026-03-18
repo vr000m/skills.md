@@ -46,6 +46,14 @@ Recommended development workflow using skills:
 2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
 3. Address review findings, update plan as needed
 4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
+5. `/deep-review` — Run a multi-lens code review after implementation and before merge
+
+## Review Checklist
+
+Use this section for project-specific won't-fix and analysis-error patterns that deep review should suppress on future runs. Keep entries stable, specific, and dated.
+Format: `- **[Category] disposition**: description (YYYY-MM-DD)`
+
+- **[Architecture] won't-fix**: mirrored Claude and Codex skill trees are intentional (2026-03-17)
 
 ## Sync Workflow
 

@@ -32,6 +32,15 @@ Use this template when creating new development plans.
 - Requirement 2
 - Requirement 3
 
+## Review Focus
+
+[Optional. Add the review criteria that `/review-plan` and `/deep-review` should pay attention to.
+Include exact spec/RFC references, compatibility constraints, known risks, or any other checks the
+author wants reviewers to make. Keep it concrete and short.]
+
+- Focus item 1
+- Focus item 2
+
 ## Implementation Checklist
 
 ### Phase 1: [Phase Name]

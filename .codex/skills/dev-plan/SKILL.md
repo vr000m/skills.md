@@ -64,14 +64,26 @@ Every plan must include these sections (see template.md for full format):
 8. **Acceptance Criteria** - Definition of done (checkboxes)
 9. **Final Results** - Summary of outcomes when complete
 
+## Review Focus
+
+Plans may include an optional `## Review Focus` section to guide `/review-plan` and `/deep-review`.
+
+Use it to capture the review criteria the author already knows matter:
+- Exact spec or RFC references
+- Backward-compatibility constraints
+- High-risk code paths or integration seams
+- Known trade-offs or areas that deserve a second look
+
+Keep it short, concrete, and specific. If a plan references external standards, name them explicitly so downstream review tooling can activate the spec-compliance lens instead of guessing.
+
 ## Workflow
 
 ### Pre-Implementation
 1. Check branch (suggest feature branch if on main)
 2. Create plan with initial structure
 3. Define phases and acceptance criteria
-4. Identify files to modify and potential risks
-5. Run `/review-plan` to audit for gaps, undocumented assumptions, and missing constraints before coding starts
+4. Identify files to modify, potential risks, and any Review Focus items that should be written into the plan
+5. Run `/review-plan` to audit for gaps, undocumented assumptions, missing constraints, and Review Focus coverage before coding starts
 6. Address review findings, then proceed to implementation (or `/fan-out` for parallel tasks)
 
 ### During Implementation
@@ -80,12 +92,14 @@ Every plan must include these sections (see template.md for full format):
 3. Update technical specifications if approach changes
 4. Add testing results as validation is performed
 5. When using `/fan-out`, fill in the **Integration Seams** table before fanning out — it tells agents what contracts to honor and tells the merge phase what to verify
+6. When using `/deep-review`, make sure the plan's `## Review Focus` section is current before starting the review pass
 
 ### Post-Implementation
 1. Mark status as Complete
 2. Fill in final testing results
 3. Document outcomes and learnings
-4. Update README.md task table if one exists in docs/dev_plans/
+4. Run `/deep-review` before merge to catch issues that slipped through implementation
+5. Update README.md task table if one exists in docs/dev_plans/
 
 ## Status Values
 

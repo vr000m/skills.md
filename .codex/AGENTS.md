@@ -22,6 +22,7 @@ Recommended development workflow using skills:
 2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
 3. Address review findings, update plan as needed
 4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
+5. `/deep-review` — Run the multi-lens review before merge
 
 ## Bug Fixing
 - When given a bug with clear signals (logs, errors, failing tests), fix it autonomously. Don't ask for hand-holding.
