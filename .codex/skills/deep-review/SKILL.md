@@ -184,9 +184,12 @@ If the documentation is up to date, say so concisely.
    Checklist` section if present.
 3. Show a cost confirmation before spawning lenses. Include the lens list, model mapping, and any
    skipped lenses.
-4. Spawn all enabled lens subagents with clean context. Use `spawn_agent` semantics, not worktrees
-   or CLI-level process fan-out.
-5. Wait for every lens to finish, then consolidate and deduplicate findings.
+4. If subagent delegation is available, spawn all enabled lens subagents with clean context. Use
+   `spawn_agent` semantics, not worktrees or CLI-level process fan-out.
+5. If subagent delegation is unavailable in the current Codex environment, run the same enabled
+   lenses sequentially in the main session using the same prompt contract and findings format rather
+   than failing the review.
+6. Wait for every lens to finish, then consolidate and deduplicate findings.
 
 ## Persisted Run State
 
@@ -254,7 +257,8 @@ using the strict bullet format below:
 ```
 
 Matching rules:
-- Match by category and disposition first
+- Match by category first
+- Treat the checklist disposition as suppression metadata, not as part of the finding match key
 - Compare the normalized description against the finding text
 - Suppress only when the checklist description matches the finding's file path, named symbol, or
   specific pattern — not when it matches only a category-level description
