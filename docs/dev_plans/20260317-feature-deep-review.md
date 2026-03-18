@@ -49,6 +49,7 @@ gstack (github.com/garrytan/gstack) demonstrates the value of cognitive mode sep
 - [ ] Define deduplication: when multiple lenses flag the same file:line, keep the higher-severity finding and note the overlap
 - [ ] Define `--continue` flag: retry only lenses that failed/timed out in the previous run, merge with prior results
 - [ ] Define `--full` flag (default): run all lenses fresh
+- [ ] Define persisted run state: `.deep-review/latest.json` (gitignored) stores lens status, findings, and run metadata for `--continue`
 - [ ] Define cost confirmation: before spawning, show user which lenses will run with which models, ask to proceed
 - [ ] Subagent mechanism: use Claude Code's built-in Agent tool (like `/review-plan`), NOT CLI spawning — no worktrees needed since all lenses review the same codebase in place
 
@@ -81,6 +82,8 @@ gstack (github.com/garrytan/gstack) demonstrates the value of cognitive mode sep
 Codex should independently create/update the following to match its own harness conventions:
 - [ ] Create `.codex/skills/deep-review/SKILL.md` — adapted from Claude version for Codex's model/platform
 - [ ] Update `.codex/skills/dev-plan/template.md` — add `## Review Focus` section
+- [ ] Update `.codex/skills/dev-plan/SKILL.md` — mention `## Review Focus` as a section to produce when creating plans (template alone isn't enough if SKILL.md doesn't reference it)
+- [ ] Update `.codex/skills/review-plan/SKILL.md` — add `## Review Focus` to the extraction list so `/review-plan` consumes author-specified spec/RFC criteria
 - [ ] Update `.codex/AGENTS.md` — add `/deep-review` to Skill Workflow section
 - [ ] Use Codex-appropriate model IDs (not Claude model names)
 
@@ -92,11 +95,13 @@ Codex should independently create/update the following to match its own harness 
 | File | Purpose |
 |------|---------|
 | `.claude/skills/deep-review/SKILL.md` | Core skill definition with lens prompts and triage flow |
+| `.deep-review/latest.json` | Persisted run state for `--continue` (gitignored, created at runtime) |
 
 ### Files to Modify
 | File | Change |
 |------|--------|
 | `.claude/skills/dev-plan/template.md` | Add `## Review Focus` as optional section in plan template |
+| `.claude/skills/review-plan/SKILL.md` | Add `## Review Focus` to the extraction list so `/review-plan` consumes spec/RFC criteria |
 | `AGENTS.md` (repo root) | Add `## Review Checklist` section; update skill workflow |
 | `README.md` | Add deep-review to skills table |
 | `scripts/promote-skills.sh` | Add `deep-review` to `MANAGED_SKILLS` |
@@ -142,6 +147,26 @@ Not all lenses run every time:
 - Timeouts: present partial results immediately with a note listing which lenses didn't complete
 - No silent skipping — if a lens didn't run, the report says so explicitly
 - `--continue` prevents permanently slow lenses from being silently abandoned
+
+**Persisted run state:**
+`--continue` requires knowing what happened last run. State is stored in `.deep-review/latest.json` (gitignored):
+```json
+{
+  "run_id": "2026-03-17T14:30:00Z",
+  "input": "branch diff feature/deep-review vs main",
+  "lenses": {
+    "logic": { "status": "completed", "model": "opus", "findings": [...] },
+    "security": { "status": "timed_out", "model": "opus", "findings": [] },
+    "spec": { "status": "skipped", "reason": "no specs in Review Focus" },
+    "architecture": { "status": "completed", "model": "sonnet", "findings": [...] },
+    "documentation": { "status": "completed", "model": "haiku", "findings": [...] }
+  }
+}
+```
+- `--continue` reads this file, re-runs only `timed_out` or `errored` lenses, merges findings
+- `--full` overwrites the file
+- File is gitignored — not committed, local-only
+- If file is missing, `--continue` falls back to `--full` with a warning
 
 **Cost confirmation:**
 Before spawning subagents, show the user:
@@ -231,6 +256,21 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 ### Review finding: AGENTS.md ambiguity
 - **Problem**: Plan said "AGENTS.md" without specifying repo-root vs `.codex/AGENTS.md`
 - **Solution**: Clarified: repo-root AGENTS.md gets Review Checklist + workflow update. `.codex/AGENTS.md` is Codex's responsibility.
+- **Files affected**: Plan updated
+
+### Codex review: persisted state for --continue
+- **Problem**: Plan didn't define where lens status and prior findings are stored for `--continue`
+- **Solution**: Added `.deep-review/latest.json` (gitignored) with explicit schema — lens status, findings, run metadata
+- **Files affected**: Plan updated, `.gitignore` needs entry at implementation time
+
+### Codex review: Phase 6 missing dev-plan SKILL.md
+- **Problem**: Phase 6 only updated template.md but Codex SKILL.md hard-codes required sections and wouldn't mention Review Focus
+- **Solution**: Added `.codex/skills/dev-plan/SKILL.md` to Phase 6 task list
+- **Files affected**: Plan updated
+
+### Codex review: review-plan doesn't consume Review Focus
+- **Problem**: Codex review-plan only extracts objective, requirements, checklist, specs, seams, acceptance criteria — not Review Focus
+- **Solution**: Added `.codex/skills/review-plan/SKILL.md` to Phase 6 and `.claude/skills/review-plan/SKILL.md` to Files to Modify
 - **Files affected**: Plan updated
 
 ### Review finding: cost of 5 opus subagents
