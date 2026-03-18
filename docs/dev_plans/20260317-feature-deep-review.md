@@ -265,7 +265,8 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 - [x] `./scripts/sync-skills.sh` with temp global directories
 - [x] `./scripts/check-sync.sh` with temp global directories
 - [x] Verified `.claude/skills/deep-review/SKILL.md` and `.codex/skills/deep-review/SKILL.md` exist in the repo
-- [ ] Live `/deep-review` slash-command smoke run in Claude Code and Codex sessions
+- [x] Live `/deep-review` slash-command smoke run in Claude Code (self-review on this branch)
+- [ ] Live `/deep-review` slash-command smoke run in Codex session
 
 ## Issues & Solutions
 
@@ -309,6 +310,21 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 - **Solution**: Added `.gitignore` to both Files to Modify table and Phase 1 checklist
 - **Files affected**: Plan updated
 
+### Self-review: input resolution divergence
+- **Problem**: Claude SKILL.md had 3 input resolution steps; Codex had 5 with `--pr` and plan-file support. Broke the "same interface" pattern.
+- **Solution**: Aligned Claude input resolution to 6 steps matching Codex: plan-file, `--pr`, explicit target, `--continue`/`--full`, branch diff, ask user
+- **Files affected**: `.claude/skills/deep-review/SKILL.md`
+
+### Self-review: missing schema_version in latest.json
+- **Problem**: `latest.json` had no schema version field. Future schema changes could cause `--continue` to silently read stale-shaped data.
+- **Solution**: Added `"schema_version": 1` to schema. `--continue` falls back to `--full` on version mismatch.
+- **Files affected**: `.claude/skills/deep-review/SKILL.md` (Codex side pending)
+
+### Self-review: vague suppression matching
+- **Problem**: "Do not suppress if the match is too vague" was qualitative in an otherwise machine-parseable protocol.
+- **Solution**: Tightened to: "suppress only when checklist description matches file path, named symbol, or specific pattern"
+- **Files affected**: `.claude/skills/deep-review/SKILL.md` (Codex side pending)
+
 ### Review finding: cost of 5 opus subagents
 - **Problem**: No cost guard for spawning 5 opus subagents
 - **Solution**: Tiered models (opus/sonnet/haiku by lens complexity) + cost confirmation before spawning
@@ -316,16 +332,16 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 
 ## Acceptance Criteria
 
-- [ ] `/deep-review` triggers correctly from slash command
-- [ ] Spawns parallel subagents with clean context (no parent history)
-- [ ] At least 3 lenses produce structured findings
-- [ ] Findings are deduplicated and sorted by severity
-- [ ] Previously-dismissed patterns (from AGENTS.md Review Checklist) are suppressed with a note
+- [x] `/deep-review` triggers correctly from slash command
+- [x] Spawns parallel subagents with clean context (no parent history)
+- [x] At least 3 lenses produce structured findings
+- [x] Findings are deduplicated and sorted by severity
+- [x] Previously-dismissed patterns (from AGENTS.md Review Checklist) are suppressed with a note
 - [ ] Triage outcomes can be recorded in AGENTS.md Review Checklist
 - [ ] Works on repos without AGENTS.md Review Checklist (graceful degradation)
 - [x] Dev-plan template includes optional Review Focus section
-- [ ] Spec compliance lens only activates when Review Focus lists specs/RFCs
-- [ ] Cost confirmation shown before spawning subagents
+- [x] Spec compliance lens only activates when Review Focus lists specs/RFCs
+- [x] Cost confirmation shown before spawning subagents
 - [ ] `--continue` retries only failed lenses and merges with prior results
 - [x] Skill syncs correctly via promote/sync/bootstrap/check-sync scripts
 - [x] Codex has equivalent skill adapted to its own harness (Codex handles independently)
