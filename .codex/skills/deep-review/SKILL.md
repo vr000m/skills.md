@@ -190,6 +190,9 @@ If the documentation is up to date, say so concisely.
    lenses sequentially in the main session using the same prompt contract and findings format rather
    than failing the review.
 6. Wait for every lens to finish, then consolidate and deduplicate findings.
+7. If delegation was used, close every completed or failed lens agent after its result has been
+   captured. Keep an agent open only if the review is intentionally paused and you expect to resume
+   that exact agent later.
 
 ## Persisted Run State
 
