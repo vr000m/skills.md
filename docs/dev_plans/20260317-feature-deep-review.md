@@ -49,7 +49,8 @@ gstack (github.com/garrytan/gstack) demonstrates the value of cognitive mode sep
 - [ ] Define deduplication: when multiple lenses flag the same file:line, keep the higher-severity finding and note the overlap
 - [ ] Define `--continue` flag: retry only lenses that failed/timed out in the previous run, merge with prior results
 - [ ] Define `--full` flag (default): run all lenses fresh
-- [ ] Define persisted run state: `.deep-review/latest.json` (gitignored) stores lens status, findings, and run metadata for `--continue`
+- [ ] Define persisted run state: `.deep-review/latest.json` (gitignored) stores lens status, findings, snapshot identity (base/head commits, diff hash), and run metadata for `--continue`
+- [ ] Add `.deep-review/` to `.gitignore`
 - [ ] Define cost confirmation: before spawning, show user which lenses will run with which models, ask to proceed
 - [ ] Subagent mechanism: use Claude Code's built-in Agent tool (like `/review-plan`), NOT CLI spawning — no worktrees needed since all lenses review the same codebase in place
 
@@ -110,6 +111,7 @@ Codex should independently create/update the following to match its own harness 
 | `scripts/check-sync.sh` | Add `deep-review` to `MANAGED_SKILLS` |
 | `.env.example` | Add `deep-review` to `MANAGED_SKILLS` |
 | `docs/dev_plans/README.md` | Add this plan to task table |
+| `.gitignore` | Add `.deep-review/` entry |
 
 ### Architecture Decisions
 
@@ -153,7 +155,9 @@ Not all lenses run every time:
 ```json
 {
   "run_id": "2026-03-17T14:30:00Z",
-  "input": "branch diff feature/deep-review vs main",
+  "base_commit": "abc1234",
+  "head_commit": "def5678",
+  "diff_hash": "sha256:...",
   "lenses": {
     "logic": { "status": "completed", "model": "opus", "findings": [...] },
     "security": { "status": "timed_out", "model": "opus", "findings": [] },
@@ -163,7 +167,11 @@ Not all lenses run every time:
   }
 }
 ```
-- `--continue` reads this file, re-runs only `timed_out` or `errored` lenses, merges findings
+- `base_commit` / `head_commit`: the merge-base and HEAD at time of run
+- `diff_hash`: SHA-256 of the diff content — fast staleness check
+- `--continue` reads this file, compares current `head_commit` and `diff_hash`:
+  - **Match**: re-run only `timed_out` or `errored` lenses, merge with prior findings
+  - **Mismatch**: warn "diff has changed since last run" and fall back to `--full`
 - `--full` overwrites the file
 - File is gitignored — not committed, local-only
 - If file is missing, `--continue` falls back to `--full` with a warning
@@ -279,6 +287,16 @@ This keeps all project knowledge in one place (AGENTS.md) rather than split acro
 ### Codex review: review-plan doesn't consume Review Focus
 - **Problem**: Codex review-plan only extracts objective, requirements, checklist, specs, seams, acceptance criteria — not Review Focus
 - **Solution**: Added `.codex/skills/review-plan/SKILL.md` to Phase 6 and `.claude/skills/review-plan/SKILL.md` to Files to Modify
+- **Files affected**: Plan updated
+
+### Codex review: --continue needs snapshot identity
+- **Problem**: Merging completed-lens findings from an older snapshot with retried lenses from a newer snapshot surfaces stale results
+- **Solution**: Added `base_commit`, `head_commit`, and `diff_hash` to `latest.json`. `--continue` compares current state — mismatch falls back to `--full` with a warning.
+- **Files affected**: Plan updated
+
+### Codex review: .gitignore not scheduled
+- **Problem**: `.deep-review/` noted as gitignored but `.gitignore` not in Files to Modify or checklist
+- **Solution**: Added `.gitignore` to both Files to Modify table and Phase 1 checklist
 - **Files affected**: Plan updated
 
 ### Review finding: cost of 5 opus subagents
