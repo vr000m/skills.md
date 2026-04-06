@@ -32,6 +32,30 @@ If the section is not specified, ask the user which section to check — full-sp
 
 If the code path is not specified, ask the user to provide it.
 
+## Steps 2–5: Resolve Spec, Fetch Requirements, Analyse Code, Return Report (Subagent)
+
+These steps involve heavy WebSearch/WebFetch for spec text and Grep/Read across the codebase — delegate them to a subagent to keep the main context lean.
+
+### Pre-flight (main context)
+
+Before spawning the subagent, read the code file(s) identified in Step 1 using the `Read` tool and capture the content. This ensures the subagent has everything it needs without referencing the conversation.
+
+### Subagent delegation
+
+**Use the Agent tool** with `subagent_type: "general-purpose"` and `model: "opus"` to spawn a single subagent. Pass it the following self-contained prompt (fill in `{{PLACEHOLDERS}}`):
+
+````
+You are performing a spec compliance check — mapping normative requirements from a specification against code to produce a structured compliance report.
+
+## Inputs
+
+- **Code path**: {{CODE_PATH}}
+- **Code content**:
+```
+{{CODE_CONTENT}}
+```
+- **Spec reference**: {{SPEC_REFERENCE}} (e.g., "RFC 4585 Section 6.2.1" or a direct URL)
+
 ## Step 2: Resolve the Spec
 
 Map the reference to a fetchable URL:
@@ -46,7 +70,7 @@ Map the reference to a fetchable URL:
 
 Use `WebSearch` to resolve named specs. Use `WebFetch` to load the spec content.
 
-If the spec or section cannot be found, tell the user and suggest alternatives. Do not proceed with guessed content.
+If the spec or section cannot be found, return an error message suggesting alternatives. Do not proceed with guessed content.
 
 ## Step 3: Fetch and Extract Requirements
 
@@ -66,10 +90,10 @@ If the section contains no normative language, report that finding and suggest c
 
 ## Step 4: Analyse Code
 
-Read the code using the `Read` tool. For each extracted requirement:
+For each extracted requirement:
 
-1. Search the code for evidence that the requirement is implemented — look for relevant control flow, validation, constants, comments, and tests
-2. Use `Grep` to find relevant patterns (function names, constants, conditionals). If not found in the target file, check adjacent modules and test files before classifying as Missing
+1. Search the provided code content for evidence that the requirement is implemented — look for relevant control flow, validation, constants, comments, and tests
+2. Use `Grep` to find relevant patterns (function names, constants, conditionals) in the project. If not found in the target file, check adjacent modules and test files before classifying as Missing
 3. Classify each requirement:
    - **Met** — code clearly implements the requirement; cite the line(s)
    - **Missing** — no evidence the requirement is addressed
@@ -79,6 +103,8 @@ Read the code using the `Read` tool. For each extracted requirement:
 When classifying, be conservative: if you are uncertain whether code meets a requirement, mark it as **Partial** with an explanation rather than **Met**.
 
 ## Step 5: Return the Report
+
+Return your findings in exactly this format (no other output):
 
 ```
 ## Spec Compliance Report
@@ -117,6 +143,11 @@ When classifying, be conservative: if you are uncertain whether code meets a req
 | SHOULD|   X |       X |       X |   X |     X |
 | MAY   |   X |       X |       X |   X |     X |
 ```
+````
+
+### After the subagent returns
+
+Present the compliance report to the user as-is.
 
 ### Report Rules
 

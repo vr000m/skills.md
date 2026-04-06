@@ -24,6 +24,23 @@ Before searching, figure out what the user is actually looking for:
 - **Broad protocol family** (e.g., "WebRTC") — identify the core/foundational RFC first, then note the key companion RFCs. Protocols like WebRTC have a whole family of specs; rank by how foundational each one is rather than listing them all flat.
 - **Specific RFC number** (e.g., "RFC 8888") — look it up directly and return its metadata and link.
 
+## Steps 2–3: Search and Return Results (Subagent)
+
+These steps involve multiple WebSearch/WebFetch calls to Datatracker and RFC Editor — delegate them to a subagent to keep the main context lean.
+
+### Subagent delegation
+
+**Use the Agent tool** with `subagent_type: "general-purpose"` and `model: "sonnet"` to spawn a single subagent. Pass it the following self-contained prompt (fill in `{{PLACEHOLDERS}}`):
+
+````
+You are finding IETF RFCs and returning structured results with direct links and brief factual annotations.
+
+## Input
+
+- **Interpreted query**: {{INTERPRETED_QUERY}}
+- **Query type**: {{QUERY_TYPE}} (one of: direct-topic, code-derived, broad-protocol-family, specific-rfc-number)
+- **Inferred protocol** (if code-derived): {{INFERRED_PROTOCOL}}
+
 ## Step 2: Search
 
 Use the `WebSearch` tool to query these sources:
@@ -45,7 +62,7 @@ IETF drafts frequently get renamed when they become RFCs, so a search for the dr
 1. Using `WebFetch` on the draft's Datatracker page (e.g., `https://datatracker.ietf.org/doc/draft-ietf-rmcat-gcc/`) and checking for a "Became RFC XXXX" banner or link
 2. Searching for the draft's core topic keywords alongside "RFC" to find the published version under its new title
 
-Some important specs never graduate to RFC status but may still be directly relevant to the user's question (e.g., Google Congestion Control / `draft-ietf-rmcat-gcc`, transport-wide congestion control / `draft-holmer-rmcat-transport-wide-cc-extensions`). When this happens:
+Some important specs never graduate to RFC status but may still be directly relevant. When this happens:
 
 - Include them only when they are clearly central to the query or when no published RFC covers the same work
 - Clearly label them as **Internet-Draft** or **Expired Internet-Draft** based on Datatracker metadata, not ecosystem adoption claims
@@ -56,7 +73,7 @@ Some important specs never graduate to RFC status but may still be directly rele
 
 **Always verify RFC numbers and links via actual search. Never rely on memorized RFC numbers — they may be wrong or outdated.**
 
-Format results as a concise list. For each published RFC:
+Return your findings in exactly this format (no other output). For each published RFC:
 
 ```
 **RFC XXXX** — [Title](https://www.rfc-editor.org/rfc/rfcXXXX)
@@ -81,13 +98,19 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 2. Key extensions or companion specs that are commonly needed
 3. Informational or experimental RFCs that provide additional context
 
+Pick the 3-5 most relevant — do not list every tangentially related RFC.
+
 ### What NOT to Do
 
 - Do NOT paraphrase or reproduce the substance of RFC content — brief factual annotations (status, relevance, obsolescence) are fine; explaining what the RFC argues or specifies is not
-- Do NOT list every RFC tangentially related to a broad topic — pick the 3-5 most relevant
 - Do NOT guess RFC numbers — always verify via search
 - Do NOT link to drafts when a published RFC exists for the same work (check the draft's Datatracker page — drafts often get renamed when they become RFCs)
-- Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor and the user asked for that broader context
+- Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor
+````
+
+### After the subagent returns
+
+Present the formatted RFC list to the user as-is.
 
 
 ## Edge Cases

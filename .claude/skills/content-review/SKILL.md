@@ -41,6 +41,30 @@ Applying full blog guidelines (style + structure + SEO/meta).
 Proceed? (y/n/change type)
 ```
 
+## Phases 2–4: Load Rules, Perform Review, Output Report (Subagent)
+
+These phases involve reading reference files, applying dozens of rules against the content, and producing a structured report — delegate them to a subagent to keep the main context lean.
+
+### Pre-flight (main context)
+
+Before spawning the subagent, read the content to review (from file or conversation) and capture it along with the detected content type from Phase 1.
+
+### Subagent delegation
+
+**Use the Agent tool** with `subagent_type: "general-purpose"` and `model: "sonnet"` to spawn a single subagent. Pass it the following self-contained prompt (fill in `{{PLACEHOLDERS}}`):
+
+````
+You are reviewing written content against style guidelines and producing a structured report.
+
+## Inputs
+
+- **Content type**: {{CONTENT_TYPE}} (one of: blog, til, technical-doc, notion, general)
+- **Content to review**:
+```
+{{CONTENT}}
+```
+- **File path** (if any): {{FILE_PATH}}
+
 ## Phase 2: Load Applicable Rules
 
 Read the appropriate reference files based on content type:
@@ -53,12 +77,12 @@ Read the appropriate reference files based on content type:
 | `notion`       | Style only  | Skip            | Skip           | Style subset |
 | `general`      | Style only  | Skip            | Skip           | Style subset |
 
-For `blog` and `til`: read `references/content-guidelines.md` for the full rule set.
-For `technical-doc`, `notion`, and `general`: read `references/writing-style-rules.md` for the universal style subset.
+For `blog` and `til`: read `references/content-guidelines.md` (relative to this skill's directory) for the full rule set.
+For `technical-doc`, `notion`, and `general`: read `references/writing-style-rules.md` (relative to this skill's directory) for the universal style subset.
 
 ## Phase 3: Perform Review
 
-Read the content. Evaluate against each applicable rule category. Collect findings with severity levels.
+Evaluate the content against each applicable rule category. Collect findings with severity levels.
 
 ### Review Categories
 
@@ -120,9 +144,9 @@ Read the content. Evaluate against each applicable rule category. Collect findin
 - **Important**: Weakens quality. Should fix. Examples: passive voice in key sections, missing code language identifiers, no forward-looking close, bullet lists in body, stale code comments, inconsistent command syntax, excessive hedge-heavy filler.
 - **Suggestion**: Polish items. Nice to have. Examples: could be more concise, alternative word choice, structural reordering, line that deserves its own paragraph.
 
-## Phase 4: Output Structured Report
+## Phase 4: Return Structured Report
 
-Present findings in this format:
+Return your findings in exactly this format (no other output):
 
 ```
 ## Content Review Report
@@ -152,6 +176,11 @@ Present findings in this format:
 For `technical-doc`: report Style findings plus the Structure subset (heading hierarchy, code block language identifiers, code-prose consistency, code example completeness). Skip Content Quality and SEO/Meta.
 
 For `notion` and `general`: report Style findings only. Skip Structure, Content Quality, and SEO/Meta.
+````
+
+### After the subagent returns
+
+Present the structured report to the user, then continue with Phase 5 (inline fixes) and Phase 6 (next steps) in the main context.
 
 ## Phase 5: Inline Suggestions
 

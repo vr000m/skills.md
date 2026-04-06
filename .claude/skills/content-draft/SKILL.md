@@ -24,7 +24,7 @@ Title suggestion: "Creating custom Claude Code skills for content review"
 Proceed? (y/n/change to blog)
 ```
 
-## Phase 2: Gather Session Context
+## Phase 2 (main context): Gather Session Context and Confirm
 
 Summarise what was accomplished in the current session. Extract:
 
@@ -35,7 +35,26 @@ Summarise what was accomplished in the current session. Extract:
 - **Rough edges**: Any surprises, gotchas, limitations, or things that didn't work?
 - **Learnings**: What was non-obvious or worth sharing?
 
-Present this summary and ask the user to confirm or adjust before drafting.
+Present this summary and ask the user to confirm or adjust before drafting. **This step stays in the main context** because it requires user interaction.
+
+## Phases 3–4: Draft Content and De-LLM Pass (Subagent)
+
+The actual drafting and authenticity pass involve reading reference files and iterative writing — delegate them to a subagent to keep the main context lean.
+
+### Subagent delegation
+
+**Use the Agent tool** with `subagent_type: "general-purpose"` and `model: "sonnet"` to spawn a single subagent. Pass it the following self-contained prompt (fill in `{{PLACEHOLDERS}}`):
+
+````
+You are drafting written content (a TIL or blog post) from a session summary provided below.
+
+## Inputs
+
+- **Content type**: {{CONTENT_TYPE}} (til or blog)
+- **Title**: {{TITLE}}
+- **Today's date**: {{TODAYS_DATE}}
+- **Session summary** (confirmed by the user):
+{{SESSION_SUMMARY}}
 
 ## Phase 3: Draft Content
 
@@ -47,7 +66,7 @@ Generate a draft following these rules:
   ```yaml
   ---
   title: 'Descriptive TIL title'
-  published_date: 'YYYY-MM-DD'
+  published_date: '{{TODAYS_DATE}}'
   status: 'draft'
   ---
   ```
@@ -64,7 +83,7 @@ Generate a draft following these rules:
   title: 'Blog Post Title'
   slug: 'url-slug-here'
   excerpt: '150-160 character description for SEO and social sharing'
-  published_date: 'YYYY-MM-DD'
+  published_date: '{{TODAYS_DATE}}'
   status: 'draft'
   category: 'Engineering'
   tags: ['tag1', 'tag2', 'tag3']
@@ -108,13 +127,22 @@ Generate a draft following these rules:
 
 ## Phase 4: De-LLM Authenticity Pass
 
-Before presenting the draft, run a targeted rewrite pass:
+Before returning the draft, run a targeted rewrite pass:
 
 1. Replace generic transitions with concrete statements.
 2. Remove hedge-heavy filler unless uncertainty is material.
 3. Ensure section openers are not repetitive in structure.
 4. Verify the draft includes at least one trade-off and one failure/rough-edge moment.
 5. Remove any banned template phrases and assistant-meta residue.
+
+## Output
+
+Return the complete draft as a markdown document (no other output). Include the frontmatter and full body.
+````
+
+### After the subagent returns
+
+The main context receives the finished draft and continues to Phase 5 (present to user) and Phase 6 (offer next steps).
 
 ## Phase 5: Present Draft
 
