@@ -23,5 +23,13 @@
 - When pipecat-context-hub MCP is available, always prefer its tools (`search_docs`, `search_api`, `search_examples`, `get_example`, `get_doc`, `get_code_snippet`) for Pipecat framework questions. Do not read `.venv` source directly.
 - **Multi-concept queries:** When searching for multiple topics at once, use ` + ` or ` & ` as delimiters (e.g., `search_docs("TTS + STT")`, `search_examples("idle timeout + function calling + Gemini")`). Each concept is searched independently and results are interleaved for balanced coverage. Do NOT stuff multiple concepts into a single natural-language query.
 
+## Destructive Operations
+- **Never `rm -rf` a data directory without backing it up first** (`cp -a <dir> <dir>.bak`).
+- **Check for active writers before deleting** — run `lsof +D <dir>` and verify no process is reading/writing.
+- **A snapshot comparison is not enough** — a directory that looks like a duplicate right now may have new files written to it minutes later by a running process.
+- **Never overwrite or delete a SQLite database wholesale.** Merge by inspecting entries row by row. Back up first.
+- When deleting data files, prefer moving to a `backups/` directory over permanent deletion, so they can be recovered.
+- This applies to any runtime data, caches, databases, or directories that could be actively used — not just source code.
+
 ## Security
 - Before committing, check staged files for PII, private keys, secrets, and credentials. Never commit these.
