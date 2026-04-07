@@ -31,5 +31,11 @@
 - When deleting data files, prefer moving to a `backups/` directory over permanent deletion, so they can be recovered.
 - This applies to any runtime data, caches, databases, or directories that could be actively used — not just source code.
 
+## Context Management
+After completing a major task (commit, review, PR, skill run), assess the conversation:
+- **Mid-task**: "We're mid-implementation on X — let's finish before managing context."
+- **More related work remains**: Suggest `/compact focus on [specific next phase]`
+- **Work is done or next task is independent**: Suggest `/clear` or provide a self-contained prompt to continue in a new session. Include: the goal, what's done, what's left, relevant file paths, and the branch name.
+
 ## Security
 - Before committing, check staged files for PII, private keys, secrets, and credentials. Never commit these.
