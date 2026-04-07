@@ -32,6 +32,30 @@ If the section is not specified, ask the user which section to check — full-sp
 
 If the code path is not specified, ask the user to provide it.
 
+## Steps 2–5: Resolve Spec, Fetch Requirements, Analyse Code, Return Report
+
+These steps involve spec lookups and codebase inspection. If subagent delegation is available and explicitly allowed in the current Codex runtime, you may delegate them to keep the main context lean. Otherwise, run the same steps in the main context so the skill still works without delegation.
+
+### Pre-flight (main context)
+
+Before delegating, read the code file(s) identified in Step 1 from the workspace and capture the content. This ensures the delegated run has everything it needs without referencing the conversation.
+
+### Execution options
+
+If delegation is available and explicitly allowed, use `spawn_agent` with a Codex model such as `gpt-5.4` to run the following self-contained prompt (fill in `{{PLACEHOLDERS}}`). If delegation is unavailable, use the same prompt contract in the main context instead.
+
+````
+You are performing a spec compliance check — mapping normative requirements from a specification against code to produce a structured compliance report.
+
+## Inputs
+
+- **Code path**: {{CODE_PATH}}
+- **Code content**:
+```
+{{CODE_CONTENT}}
+```
+- **Spec reference**: {{SPEC_REFERENCE}} (e.g., "RFC 4585 Section 6.2.1" or a direct URL)
+
 ## Step 2: Resolve the Spec
 
 Map the reference to a fetchable URL:
@@ -46,7 +70,7 @@ Map the reference to a fetchable URL:
 
 Use `search_query` to resolve named specs on official domains only. Use `open` to load the resolved page. If the user provided a section, prefer a URL with the section anchor; if the anchor does not land cleanly, use `find` on the section heading or number.
 
-If the spec or section cannot be found, tell the user and suggest alternatives. Do not proceed with guessed content.
+If the spec or section cannot be found, return an error message suggesting alternatives. Do not proceed with guessed content.
 
 ## Step 3: Fetch and Extract Requirements
 
@@ -66,12 +90,10 @@ If the section contains no normative language, report that finding and suggest c
 
 ## Step 4: Analyse Code
 
-Read the code from the workspace directly. Use `rg` to find relevant patterns (function names, constants, conditionals) and `nl -ba` or `sed -n` to capture exact line-number evidence.
-
 For each extracted requirement:
 
-1. Search the code for evidence that the requirement is implemented — look for relevant control flow, validation, constants, comments, and tests
-2. Use `rg` to find relevant patterns (function names, constants, conditionals). If not found in the target file, check adjacent modules and test files before classifying as Missing
+1. Search the provided code content for evidence that the requirement is implemented — look for relevant control flow, validation, constants, comments, and tests
+2. Use `rg` to find relevant patterns (function names, constants, conditionals) in the project. If not found in the target file, check adjacent modules and test files before classifying as Missing
 3. Classify each requirement:
    - **Met** — code clearly implements the requirement; cite the line(s)
    - **Missing** — no evidence the requirement is addressed
@@ -81,6 +103,8 @@ For each extracted requirement:
 When classifying, be conservative: if you are uncertain whether code meets a requirement, mark it as **Partial** with an explanation rather than **Met**.
 
 ## Step 5: Return the Report
+
+Return your findings in exactly this format (no other output):
 
 ```
 ## Spec Compliance Report
@@ -119,6 +143,11 @@ When classifying, be conservative: if you are uncertain whether code meets a req
 | SHOULD|   X |       X |       X |   X |     X |
 | MAY   |   X |       X |       X |   X |     X |
 ```
+````
+
+### After delegated execution
+
+If you delegated, present the compliance report to the user as-is. If you ran Steps 2-5 locally, present the same report directly.
 
 ### Report Rules
 

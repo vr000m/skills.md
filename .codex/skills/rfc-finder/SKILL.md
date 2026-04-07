@@ -24,14 +24,31 @@ Before searching, figure out what the user is actually looking for:
 - **Broad protocol family** (e.g., "WebRTC") — identify the core/foundational RFC first, then note the key companion RFCs. Protocols like WebRTC have a whole family of specs; rank by how foundational each one is rather than listing them all flat.
 - **Specific RFC number** (e.g., "RFC 8888") — look it up directly and return its metadata and link.
 
+## Steps 2–3: Search and Return Results
+
+These steps involve multiple web lookups against Datatracker and RFC Editor. If subagent delegation is available and explicitly allowed in the current Codex runtime, you may delegate them to keep the main context lean. Otherwise, run the same steps in the main context so the skill still works without delegation.
+
+### Execution options
+
+If delegation is available and explicitly allowed, use `spawn_agent` with a Codex model such as `gpt-5.4-mini` to run the following self-contained prompt (fill in `{{PLACEHOLDERS}}`). If delegation is unavailable, use the same prompt contract in the main context instead.
+
+````
+You are finding IETF RFCs and returning structured results with direct links and brief factual annotations.
+
+## Input
+
+- **Interpreted query**: {{INTERPRETED_QUERY}}
+- **Query type**: {{QUERY_TYPE}} (one of: direct-topic, code-derived, broad-protocol-family, specific-rfc-number)
+- **Inferred protocol** (if code-derived): {{INFERRED_PROTOCOL}}
+
 ## Step 2: Search
 
-Use the available web-browsing tools in the current Codex runtime to query these sources. In runtimes with the standard web tool, use `search_query` with a `domains` filter to find candidate pages, then `open` the official Datatracker or RFC Editor result directly.
+Use the standard web tools in the current Codex runtime to query these sources. Prefer `search_query` with a `domains` filter:
 
-1. **Primary**: `datatracker.ietf.org` — search for the topic/protocol keywords with `domains: ["datatracker.ietf.org"]`
-2. **Fallback**: `rfc-editor.org` — if Datatracker does not surface a good result, search with `domains: ["rfc-editor.org"]`
+1. **Primary**: `datatracker.ietf.org` — search for the topic/protocol keywords
+2. **Fallback**: `rfc-editor.org` — useful for older or more obscure RFCs that may not surface well on Datatracker
 
-Open specific Datatracker pages when you need to check draft-to-RFC status or verify details. Prefer official pages only; do not rely on secondary summaries when RFC metadata can be verified from Datatracker or RFC Editor. If live web browsing is unavailable in the current runtime, say that you cannot verify current RFC metadata and ask the user for a link or permission to browse.
+Use `open` to load specific Datatracker pages when you need to check draft-to-RFC status or verify details.
 
 Search tips:
 - Use protocol-specific terminology (e.g., "RTCP feedback NACK" not "video call packet loss recovery")
@@ -42,10 +59,10 @@ Search tips:
 
 IETF drafts frequently get renamed when they become RFCs, so a search for the draft name alone may miss the published version. When you find a relevant draft, always check whether it graduated to an RFC — and if so, link to the RFC instead. You can verify this by:
 
-1. Opening the draft's Datatracker page (e.g., `https://datatracker.ietf.org/doc/draft-ietf-rmcat-gcc/`) and checking for a "Became RFC XXXX" banner or link
+1. Using `open` on the draft's Datatracker page (e.g., `https://datatracker.ietf.org/doc/draft-ietf-rmcat-gcc/`) and checking for a "Became RFC XXXX" banner or link
 2. Searching for the draft's core topic keywords alongside "RFC" to find the published version under its new title
 
-Some important specs never graduate to RFC status but may still be directly relevant to the user's question (e.g., Google Congestion Control / `draft-ietf-rmcat-gcc`, transport-wide congestion control / `draft-holmer-rmcat-transport-wide-cc-extensions`). When this happens:
+Some important specs never graduate to RFC status but may still be directly relevant. When this happens:
 
 - Include them only when they are clearly central to the query or when no published RFC covers the same work
 - Clearly label them as **Internet-Draft** or **Expired Internet-Draft** based on Datatracker metadata, not ecosystem adoption claims
@@ -56,7 +73,7 @@ Some important specs never graduate to RFC status but may still be directly rele
 
 **Always verify RFC numbers and links via actual search. Never rely on memorized RFC numbers — they may be wrong or outdated.**
 
-Format results as a concise list. For each published RFC:
+Return your findings in exactly this format (no other output). For each published RFC:
 
 ```
 **RFC XXXX** — [Title](https://www.rfc-editor.org/rfc/rfcXXXX)
@@ -81,20 +98,28 @@ When multiple RFCs are related to the query, rank them by how foundational they 
 2. Key extensions or companion specs that are commonly needed
 3. Informational or experimental RFCs that provide additional context
 
+Pick the 3-5 most relevant — do not list every tangentially related RFC.
+
 ### What NOT to Do
 
 - Do NOT paraphrase or reproduce the substance of RFC content — brief factual annotations (status, relevance, obsolescence) are fine; explaining what the RFC argues or specifies is not
-- Do NOT list every RFC tangentially related to a broad topic — pick the 3-5 most relevant
 - Do NOT guess RFC numbers — always verify via search
 - Do NOT link to drafts when a published RFC exists for the same work (check the draft's Datatracker page — drafts often get renamed when they become RFCs)
-- Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor and the user asked for that broader context
+- Do NOT make ecosystem adoption claims unless you verified them from an authoritative source beyond Datatracker/RFC Editor
+````
+
+### After delegated execution
+
+If you delegated, present the formatted RFC list to the user as-is. If you ran Steps 2-3 locally, present the same formatted list directly.
+
+
 ## Edge Cases
 
 - **No results found**: Tell the user the search returned nothing. Suggest alternative search terms or ask them to clarify the protocol/topic. Do not fabricate results.
 - **Invalid or non-existent RFC number**: If the user asks for a specific RFC number that doesn't exist, say so clearly. Suggest nearby RFC numbers or search by topic instead.
 - **Ambiguous query**: If a term maps to multiple protocols (e.g., "flow control" could be TCP, HTTP/2, or QUIC), ask the user to narrow it down or return the top result for each protocol with a note.
 - **Very old or obsoleted RFCs**: Always flag when an RFC has been obsoleted and link to the replacement. If the user specifically wants the old version, provide it but note the current version.
-- **Direct URL input**: If the query is a Datatracker or RFC Editor URL, open it directly, extract the RFC/draft metadata, and return it in the standard format. No search needed.
+- **Direct URL input**: If the query is a Datatracker or RFC Editor URL, load it directly via `open`, extract the RFC/draft metadata, and return it in the standard format. No search needed.
 
 ## Examples
 
