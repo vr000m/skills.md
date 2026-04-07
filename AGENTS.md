@@ -48,6 +48,8 @@ Recommended development workflow using skills:
 4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
 5. `/deep-review` — Run a multi-lens code review after implementation and before merge
 
+Skills delegate heavy phases (research, analysis, report generation) to subagents and return only the structured result to the main context. This keeps main context lean and preserves token budgets on long sessions. User-facing I/O (confirmations, applying edits, presenting results) stays in the main context.
+
 ## Review Checklist
 
 Use this section for project-specific won't-fix and analysis-error patterns that deep review should suppress on future runs. Keep entries stable, specific, and dated.
