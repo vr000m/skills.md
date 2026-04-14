@@ -33,6 +33,9 @@ to delegate further.
    the default branch.
 5. If no target can be resolved, ask the user for a plan path or PR reference.
 
+Input resolution questions are part of setup. It is fine to ask the user which PR, commit range,
+plan, or branch diff to review when that target is ambiguous or missing.
+
 If a plan file is supplied, treat it as the author-supplied review brief. If the plan's branch does
 not match the current branch or the requested PR, call out the mismatch before proceeding.
 
@@ -188,8 +191,9 @@ If the documentation is up to date, say so concisely.
 1. Resolve the target diff and any matching plan brief.
 2. Read repo-root `AGENTS.md` from the merge base if it exists there and load the `## Review
    Checklist` section if present.
-3. Print a single-line run summary before spawning lenses. Include the lens list, model mapping, and
-   any skipped lenses, then proceed immediately unless the user interrupts.
+3. After input resolution is complete, print a single-line run summary before spawning lenses.
+   Include the lens list, model mapping, and any skipped lenses. Do not ask for an additional
+   confirmation after this summary; proceed immediately unless the user interrupts.
 4. If subagent delegation is available, spawn all enabled lens subagents with clean context. Use
    `spawn_agent` semantics, not worktrees or CLI-level process fan-out.
 5. If subagent delegation is unavailable in the current Codex environment, run the same enabled
@@ -288,7 +292,8 @@ not to.
 
 ## Run Summary
 
-Show this before spawning lenses, with the actual models that will run:
+Show this before spawning lenses, with the actual models that will run. This summary is
+informational after setup, not a second confirmation prompt:
 
 ```text
 Deep review will run 4 lenses:

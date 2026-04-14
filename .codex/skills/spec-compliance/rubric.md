@@ -31,7 +31,7 @@ before presenting the report to the user.
 
 ## Report Structure
 
-- Status icons prefix every finding (Met, Missing, Partial, N/A)
+- Status icons prefix every finding (`✅ Met`, `❌ Missing`, `⚠️ Partial`, `➖ N/A`)
 - Findings are grouped by requirement level (MUST first, then SHOULD, then MAY)
 - Summary table includes all three rows (MUST/SHOULD/MAY) even when a level has zero requirements
 - The spec section URL is linked
