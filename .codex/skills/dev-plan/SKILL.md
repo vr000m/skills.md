@@ -1,6 +1,6 @@
 ---
 name: dev-plan
-description: "Create or update development plans for multi-component features, architecture changes, or complex work. Use when work affects 3+ files, involves UI/UX changes, database migrations, or is estimated at 2+ hours."
+description: "Creates and updates development plans for multi-component features, architecture changes, and complex work. Use when work affects 3+ files, involves UI/UX changes, database migrations, or is estimated at 2+ hours, or when the user says \"dev plan\", \"plan this\", or \"/dev-plan\"."
 argument-hint: "[action] [type] [name]"
 ---
 

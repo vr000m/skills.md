@@ -10,6 +10,12 @@ Run a coordinated review of code changes using fresh Codex subagents. Each lens 
 prompt, a clean context, and only the target material it needs. Do not pass parent conversation
 history into the lens prompts.
 
+## Delegation Pattern
+
+This skill uses one fresh-context reviewer per lens. The main orchestrator coordinates the run and
+only consumes each lens's final report; it never shares parent conversation history or asks lenses
+to delegate further.
+
 ## What This Skill Reviews
 
 - A plan file, when you want to use `## Review Focus` as the review brief
@@ -26,6 +32,9 @@ history into the lens prompts.
 4. If no explicit argument is provided, review the current branch diff against the merge base with
    the default branch.
 5. If no target can be resolved, ask the user for a plan path or PR reference.
+
+Input resolution questions are part of setup. It is fine to ask the user which PR, commit range,
+plan, or branch diff to review when that target is ambiguous or missing.
 
 If a plan file is supplied, treat it as the author-supplied review brief. If the plan's branch does
 not match the current branch or the requested PR, call out the mismatch before proceeding.
@@ -182,8 +191,9 @@ If the documentation is up to date, say so concisely.
 1. Resolve the target diff and any matching plan brief.
 2. Read repo-root `AGENTS.md` from the merge base if it exists there and load the `## Review
    Checklist` section if present.
-3. Show a cost confirmation before spawning lenses. Include the lens list, model mapping, and any
-   skipped lenses.
+3. After input resolution is complete, print a single-line run summary before spawning lenses.
+   Include the lens list, model mapping, and any skipped lenses. Do not ask for an additional
+   confirmation after this summary; proceed immediately unless the user interrupts.
 4. If subagent delegation is available, spawn all enabled lens subagents with clean context. Use
    `spawn_agent` semantics, not worktrees or CLI-level process fan-out.
 5. If subagent delegation is unavailable in the current Codex environment, run the same enabled
@@ -280,18 +290,16 @@ When the user marks a finding as `won't-fix` or `analysis-error`, append a new c
 repo-root `AGENTS.md` in the strict machine-parseable format above, unless the user explicitly says
 not to.
 
-## Cost Confirmation
+## Run Summary
 
-Show this before spawning lenses, with the actual models that will run:
+Show this before spawning lenses, with the actual models that will run. This summary is
+informational after setup, not a second confirmation prompt:
 
 ```text
 Deep review will run 4 lenses:
   Logic (gpt-5.4), Security (gpt-5.4), Architecture (gpt-5.4-mini), Documentation (gpt-5.4-mini)
   Spec compliance: skipped (no specs in Review Focus)
-Proceed? [Y/n]
 ```
-
-If the user declines, stop without running any lenses.
 
 ## Output
 
@@ -319,3 +327,9 @@ the accepted changes, then rerun `/deep-review` if the snapshot changed.
 ```
 
 If the review is clean, say so concisely and note any residual risks or lenses that were skipped.
+
+## Self-Check Rubric
+
+Before presenting findings, verify the report against [rubric.md](rubric.md). The rubric covers
+coverage, finding quality, suppression discipline, scope discipline, output structure, and
+continuation safety.

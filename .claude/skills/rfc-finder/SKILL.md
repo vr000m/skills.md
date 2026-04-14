@@ -1,6 +1,6 @@
 ---
 name: rfc-finder
-description: "Find and link to IETF RFCs by topic, protocol, code context, or RFC number. Trigger when the user mentions 'RFC', 'IETF', 'datatracker', a specific RFC number, 'what RFC covers X', or asks about the spec behind a protocol (WebRTC, SIP, QUIC, HTTP, TLS, STUN, TURN, ICE, SDP, RTP, RTCP, SCTP, DTLS)."
+description: "Finds and links to IETF RFCs by topic, protocol, code context, or RFC number, returning direct links with factual annotations rather than paraphrased content. Use when the user mentions 'RFC', 'IETF', 'datatracker', a specific RFC number, 'what RFC covers X', or asks about the spec behind a protocol (WebRTC, SIP, QUIC, HTTP, TLS, STUN, TURN, ICE, SDP, RTP, RTCP, SCTP, DTLS)."
 argument-hint: "[topic|protocol|RFC-number|code-snippet]"
 ---
 

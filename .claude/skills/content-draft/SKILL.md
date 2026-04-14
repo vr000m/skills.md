@@ -1,6 +1,6 @@
 ---
 name: content-draft
-description: This skill should be used when the user asks to "draft a TIL from this session", "write up what we just did", "turn this into a blog post", "summarise this session as a TIL", "create a TIL from this work", or wants to generate written content from the current Claude session context.
+description: Drafts TILs or blog posts from the current Claude session context, enforcing British English and anti-LLM style rules (concrete-first opener, evidence density, decision + trade-off, failure + adjustment). Use when the user says "/content-draft" or asks to "draft a TIL from this session", "write up what we just did", "turn this into a blog post", "summarise this session as a TIL", or "create a TIL from this work".
 argument-hint: [--type til|blog] [--title "optional title"]
 ---
 

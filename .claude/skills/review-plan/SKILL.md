@@ -1,6 +1,6 @@
 ---
 name: review-plan
-description: Review a development plan for gaps, undocumented assumptions, missing constraints, and architectural risks before implementation begins. Use this skill after a dev-plan is created, when the user says "review plan", "audit plan", "check plan", or "/review-plan". Also trigger proactively whenever a dev-plan skill completes and produces a plan file — catching gaps before coding starts is far cheaper than discovering them mid-implementation.
+description: Reviews a development plan for gaps, undocumented assumptions, missing constraints, and architectural risks before implementation begins. Spawns a fresh-context subagent that audits the plan against the actual codebase. Use after a dev-plan is created, when the user says "review plan", "audit plan", "check plan", or "/review-plan", and proactively after the dev-plan skill produces a new plan file.
 argument-hint: "[path/to/plan.md]"
 ---
 
@@ -11,6 +11,10 @@ Spawn a fresh-context subagent to audit a development plan before implementation
 ## Why This Exists
 
 Plans encode assumptions. Some are stated, most aren't. The author knows what they meant; a fresh reader sees only what's written. This skill exploits that gap: an independent agent reads the plan cold, explores the codebase to verify claims, and surfaces what's missing, ambiguous, or risky. Findings go back to the user for discussion — the plan is never modified automatically.
+
+## Delegation Pattern
+
+This skill spawns a single subagent with **isolated context** — no parent conversation history, only the plan content and codebase access. This is the same pattern that maps to Managed Agents `callable_agents`: an orchestrator (this skill) delegates a well-scoped task to a worker with its own context window, and only sees the worker's final report. The reviewer does not spawn further subagents (one level of delegation only).
 
 ## When to Run
 

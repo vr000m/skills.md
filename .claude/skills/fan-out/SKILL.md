@@ -1,12 +1,16 @@
 ---
 name: fan-out
-description: Fan out independent tasks from a dev-plan to parallel Claude agents in isolated git worktrees. Use after planning when 2+ tasks can run independently.
+description: Fans out independent tasks from a dev-plan to parallel Claude agents running in isolated git worktrees, then merges and verifies the results. Use after planning when 2+ tasks can run independently, or when the user says "fan out", "parallelize this", or "/fan-out".
 argument-hint: "[plan-file | status | logs N | cancel [N] | merge | cleanup] [--dry-run] [--max-agents N] [--model MODEL]"
 ---
 
 # Fan Out: Parallel Agent Orchestration
 
 Dispatch independent tasks to parallel Claude agents, each in an isolated git worktree with its own branch.
+
+## Delegation Depth
+
+Spawned agents are one level deep — they implement their assigned task and must not themselves invoke `/fan-out` or spawn further parallel agents. This keeps the worktree/process model and merge accounting tractable. Agents may still use the `Agent` tool for in-process subagent delegation within their own task (e.g., calling `/review-plan` on a file), but they cannot start a new fan-out tier.
 
 ## Usage
 
