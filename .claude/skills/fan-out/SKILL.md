@@ -8,6 +8,10 @@ argument-hint: "[plan-file | status | logs N | cancel [N] | merge | cleanup] [--
 
 Dispatch independent tasks to parallel Claude agents, each in an isolated git worktree with its own branch.
 
+## Delegation Depth
+
+Spawned agents are one level deep — they implement their assigned task and must not themselves invoke `/fan-out` or spawn further parallel agents. This keeps the worktree/process model and merge accounting tractable. Agents may still use the `Agent` tool for in-process subagent delegation within their own task (e.g., calling `/review-plan` on a file), but they cannot start a new fan-out tier.
+
 ## Usage
 
 - `/fan-out docs/dev_plans/20260206-feature-xyz.md` -- Parse plan, fan out independent tasks
