@@ -1,6 +1,6 @@
 ---
 name: spec-compliance
-description: "Check whether code complies with a referenced specification section. Trigger when the user asks to 'check compliance', 'verify against spec', 'does this implement RFC X', 'conformance check', 'check against W3C', or references RFC 2119 requirements (MUST/SHOULD/MAY) in the context of code review."
+description: "Checks whether code complies with a referenced specification section by extracting normative RFC 2119 requirements (MUST/SHOULD/MAY) and mapping each against the code as Met/Missing/Partial/N/A. Use when the user asks to 'check compliance', 'verify against spec', 'does this implement RFC X', 'conformance check', 'check against W3C', or references RFC 2119 requirements in the context of code review."
 argument-hint: "[file-path] [spec-reference] [section]"
 ---
 
@@ -147,7 +147,7 @@ Return your findings in exactly this format (no other output):
 
 ### After the subagent returns
 
-Present the compliance report to the user as-is.
+Present the compliance report to the user as-is. Before presenting, verify it against [rubric.md](rubric.md) — gradeable criteria covering spec resolution, requirement extraction, per-requirement classification, report structure, and scope discipline. The rubric also doubles as a Managed Agents outcome rubric if this skill is later run as a graded session.
 
 ### Report Rules
 

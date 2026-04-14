@@ -1,6 +1,6 @@
 ---
 name: update-docs
-description: Sync project documentation with code changes on the current branch. Checks dev plans, changelogs, READMEs, AGENTS.md, and PR descriptions for staleness against the actual diff, then offers to update them. Use after finishing implementation work, before creating or merging a PR.
+description: Syncs project documentation with code changes on the current branch by checking dev plans, changelogs, READMEs, AGENTS.md, and PR descriptions for staleness against the actual diff, then offering targeted updates. Use after finishing implementation work, before creating or merging a PR, or when the user says "update docs" or "/update-docs".
 argument-hint: "[--apply] [--pr NUMBER]"
 ---
 

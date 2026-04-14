@@ -66,11 +66,15 @@ Use the smallest model that still fits the lens, but keep the tiering stable:
 | Architecture | sonnet |
 | Documentation | haiku |
 
+## Delegation Pattern
+
+This skill spawns one subagent per lens, each with **isolated context** (no parent conversation history) and a **self-contained prompt**. This is the same pattern that maps to Managed Agents `callable_agents`: an orchestrator (this skill) coordinates specialised workers, each with its own model and scope, and the orchestrator only sees their final reports — never their intermediate reasoning. Lenses do not call further subagents (one level of delegation only); if a lens needs spec text, it fetches it directly rather than spawning a sub-subagent.
+
 ## Workflow
 
-### 1. Confirm Cost
+### 1. Announce the Run
 
-Before spawning anything, show the user exactly which lenses will run and which model each lens will use. If the spec compliance lens is skipped because the plan has no `## Review Focus` specs or RFCs, say that explicitly. Ask for confirmation and wait.
+Print a single-line summary of which lenses will run and which model each uses. If the spec compliance lens is skipped because the plan has no `## Review Focus` specs or RFCs, say that on the same line. Then proceed immediately — no confirmation prompt. The user can interrupt at any time if they need to abort.
 
 ### 2. Spawn Fresh-Context Subagents
 
@@ -349,3 +353,7 @@ If the review is clean, say so concisely and call out any residual risks or skip
   - `fix`
   - `won't-fix` with a reason
   - `analysis-error` with a correction
+
+## Self-Check Rubric
+
+Before presenting findings, verify the report against [rubric.md](rubric.md). The rubric defines gradeable criteria covering coverage, finding quality, suppression discipline, scope discipline, output structure, and continuation safety. It also doubles as a Managed Agents outcome rubric if this skill is later run as a graded session.
