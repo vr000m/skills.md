@@ -32,35 +32,36 @@ Separate tidy-up: the `deep-review` Phase 1 "Confirm Cost" gate asks for user co
 ## Implementation Checklist
 
 ### Phase 1: Description audit
-- [ ] Rewrite `dev-plan` description to third person
-- [ ] Rewrite `fan-out` description to third person
-- [ ] Rewrite `review-plan` description to third person
-- [ ] Rewrite `rfc-finder` description to third person
-- [ ] Rewrite `spec-compliance` description to third person
-- [ ] Rewrite `update-docs` description to third person
-- [ ] Restructure `content-draft` to lead with what it does
-- [ ] Restructure `content-review` to lead with what it does
-- [ ] Leave `deep-review` description as-is (already compliant)
+- [x] Rewrite `dev-plan` description to third person
+- [x] Rewrite `fan-out` description to third person
+- [x] Rewrite `review-plan` description to third person
+- [x] Rewrite `rfc-finder` description to third person
+- [x] Rewrite `spec-compliance` description to third person
+- [x] Rewrite `update-docs` description to third person
+- [x] Restructure `content-draft` to lead with what it does
+- [x] Restructure `content-review` to lead with what it does
+- [x] Leave `deep-review` description as-is (already compliant)
 
 ### Phase 2: Line-count verification
 - [x] Confirm all SKILL.md under 500 lines (max observed: deep-review at 351)
 
 ### Phase 3: Rubric files
-- [ ] Create `.claude/skills/deep-review/rubric.md`
-- [ ] Create `.claude/skills/spec-compliance/rubric.md`
-- [ ] Reference rubrics from SKILL.md bodies
+- [x] Create `.claude/skills/deep-review/rubric.md`
+- [x] Create `.claude/skills/spec-compliance/rubric.md`
+- [x] Reference rubrics from SKILL.md bodies
 
 ### Phase 4: Multi-agent pattern documentation
-- [ ] Add short "Delegation pattern" note to `deep-review/SKILL.md`
-- [ ] Add equivalent note to `review-plan/SKILL.md`
+- [x] Add short "Delegation pattern" note to `deep-review/SKILL.md`
+- [x] Add equivalent note to `review-plan/SKILL.md`
+- [x] Document delegation depth in `fan-out/SKILL.md` (added during review-fix pass)
 
 ### Phase 5: Remove confirmation gate
-- [ ] Drop "Phase 1: Confirm Cost" from `deep-review/SKILL.md`
-- [ ] Replace with a single-line status announcement (no wait)
+- [x] Drop "Phase 1: Confirm Cost" from `deep-review/SKILL.md`
+- [x] Replace with a single-line status announcement (no wait)
 
 ### Phase 6: Propagate and commit
-- [ ] `just promote-skills` to sync to `~/.claude/skills/`
-- [ ] `just check-sync` to verify
+- [x] `just promote-skills` to sync to `~/.claude/skills/`
+- [x] `just check-sync` to verify
 - [ ] Commit and open PR
 
 ## Technical Specifications
@@ -103,9 +104,16 @@ Separate tidy-up: the `deep-review` Phase 1 "Confirm Cost" gate asks for user co
 
 Run via `/codex:adversarial-review` against the working tree. Verdict: needs-attention. Two findings, both dismissed after discussion:
 
-- **[high] Codex skill tree stale** — Dismissed. The `.codex/skills/` mirror is maintained by the Codex CLI in its own review pass, per the `no-codex-edits` workflow. Out of scope for this Claude-side change.
+- **[high] Codex skill tree stale** — Dismissed. The `.codex/skills/` mirror is maintained by the Codex CLI in its own review pass, per the `no-codex-edits` workflow. Out of scope for this Claude-side change. (Subsequently confirmed: Codex CLI mirrored the changes in commits `906f946` and `ea71ce2`.)
 - **[medium] deep-review auto-spawns on possibly-wrong target** — Dismissed. The removed gate was the *post-resolution* "Confirm Cost" prompt, which sat after target/scope were already determined and offered no further decision. Codex's reasoning about implicit targets applies to an earlier phase that does not exist in this skill (input resolution is deterministic), so adding a gate there would not match the user's mental model. The friction-free path is intentional.
+
+### Deep Review (2026-04-14)
+
+Run via `/deep-review only .claude changes` against the branch diff. Logic, Security, and Documentation lenses returned clean. Spec lens skipped (no specs in Review Focus). Architecture lens surfaced 2 minor findings, both fixed in commit `72d8687`:
+
+- **[Architecture/minor] content-draft and content-review descriptions lack /command trigger phrase** — Fixed. Added `"/content-draft"` and `"/content-review"` to the respective descriptions for routing parity with all other skills.
+- **[Architecture/minor] Delegation Pattern note added to deep-review and review-plan but not fan-out** — Fixed. Added a "Delegation Depth" section to `fan-out/SKILL.md` documenting the one-level constraint (spawned agents must not start a new fan-out tier).
 
 ### Summary
 
-Local skills now align with Managed Agents conventions (third-person descriptions, rubric files, explicit delegation pattern notes). The same SKILL.md files could be uploaded as custom skills with no structural rework. deep-review runs friction-free after target resolution.
+Local skills now align with Managed Agents conventions (third-person descriptions, rubric files, explicit delegation pattern notes, slash-command trigger parity). The same SKILL.md files could be uploaded as custom skills with no structural rework. deep-review runs friction-free after target resolution. Adversarial and multi-lens reviews ran clean after the two fixes.

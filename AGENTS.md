@@ -50,6 +50,8 @@ Recommended development workflow using skills:
 
 Skills delegate heavy phases (research, analysis, report generation) to subagents and return only the structured result to the main context. This keeps main context lean and preserves token budgets on long sessions. User-facing I/O (confirmations, applying edits, presenting results) stays in the main context.
 
+**Delegation depth: one level.** A skill (the orchestrator) may spawn workers — `Agent`-tool subagents in `deep-review` and `review-plan`, worktree processes in `fan-out` — but those workers must not themselves spawn further workers. Keeping a flat orchestrator/worker tree makes context isolation, result aggregation, and (for fan-out) merge accounting tractable. This mirrors the Claude Managed Agents `callable_agents` model, where a coordinator can call other agents but those agents cannot call agents of their own.
+
 ## Review Checklist
 
 Use this section for project-specific won't-fix and analysis-error patterns that deep review should suppress on future runs. Keep entries stable, specific, and dated.
