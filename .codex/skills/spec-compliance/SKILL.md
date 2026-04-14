@@ -1,6 +1,6 @@
 ---
 name: spec-compliance
-description: "Check whether code complies with a referenced specification section. Trigger when the user asks to 'check compliance', 'verify against spec', 'does this implement RFC X', 'conformance check', 'check against W3C', or references RFC 2119 requirements (MUST/SHOULD/MAY) in the context of code review."
+description: "Checks whether code complies with a referenced specification section by extracting normative RFC 2119 requirements (MUST/SHOULD/MAY) and mapping each against the code as Met/Missing/Partial/N/A. Use when the user asks to 'check compliance', 'verify against spec', 'does this implement RFC X', 'conformance check', 'check against W3C', or references RFC 2119 requirements in the context of code review."
 argument-hint: "[file-path] [spec-reference] [section]"
 ---
 
@@ -145,9 +145,9 @@ Return your findings in exactly this format (no other output):
 ```
 ````
 
-### After delegated execution
+### After execution
 
-If you delegated, present the compliance report to the user as-is. If you ran Steps 2-5 locally, present the same report directly.
+Before presenting the compliance report to the user, verify it against [rubric.md](rubric.md). The rubric is both a local self-check and an outcome rubric if this skill is later run in a graded delegated flow.
 
 ### Report Rules
 
