@@ -90,9 +90,22 @@ Separate tidy-up: the `deep-review` Phase 1 "Confirm Cost" gate asks for user co
 
 ## Acceptance Criteria
 
-- [ ] All 9 skill descriptions are third-person
-- [ ] All 9 SKILL.md bodies under 500 lines
-- [ ] Rubric files exist and are referenced from SKILL.md
-- [ ] deep-review no longer prompts for confirmation before spawning lenses
-- [ ] `just check-sync` passes after `just promote-skills`
+- [x] All 9 skill descriptions are third-person
+- [x] All 9 SKILL.md bodies under 500 lines
+- [x] Rubric files exist and are referenced from SKILL.md
+- [x] deep-review no longer prompts for confirmation before spawning lenses
+- [x] `just check-sync` passes after `just promote-skills`
 - [ ] PR opened against main
+
+## Final Results
+
+### Codex Adversarial Review (2026-04-14)
+
+Run via `/codex:adversarial-review` against the working tree. Verdict: needs-attention. Two findings, both dismissed after discussion:
+
+- **[high] Codex skill tree stale** — Dismissed. The `.codex/skills/` mirror is maintained by the Codex CLI in its own review pass, per the `no-codex-edits` workflow. Out of scope for this Claude-side change.
+- **[medium] deep-review auto-spawns on possibly-wrong target** — Dismissed. The removed gate was the *post-resolution* "Confirm Cost" prompt, which sat after target/scope were already determined and offered no further decision. Codex's reasoning about implicit targets applies to an earlier phase that does not exist in this skill (input resolution is deterministic), so adding a gate there would not match the user's mental model. The friction-free path is intentional.
+
+### Summary
+
+Local skills now align with Managed Agents conventions (third-person descriptions, rubric files, explicit delegation pattern notes). The same SKILL.md files could be uploaded as custom skills with no structural rework. deep-review runs friction-free after target resolution.
