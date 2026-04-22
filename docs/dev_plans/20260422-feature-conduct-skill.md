@@ -1,6 +1,6 @@
 # Task: `conduct` skill — phased delegation for linear implementation
 
-**Status**: Not Started
+**Status**: In Progress
 **Assigned to**: Claude (implementation), user (review gates)
 **Priority**: Medium
 **Branch**: `feature/conduct-skill`
@@ -198,12 +198,12 @@ All reports use two distinct phase identifiers:
 **Test files:** none (manual verification)
 **Test command:** none (manual)
 
-- [ ] **Resolve contract conflict first.** `review-plan/SKILL.md:142,151` currently says "Do NOT modify the plan automatically" / "Never modify the plan file directly." Rewrite both lines to carve out the marker footer: "Never modify the plan *body* automatically; findings drive a conversation. The sole exception is the review marker footer — a single trailing comment line appended after the user explicitly accepts or waives findings."
-- [ ] After the findings-presentation step, add a prompt: "Are findings addressed (yes/waive/no)?"
-- [ ] On `yes` or `waive`: compute the plan hash per the rule in `/conduct` Preflight (strip only the final line if it matches the marker regex, then `git hash-object`), append or replace the final line with `<!-- reviewed: YYYY-MM-DD @ <hash> -->`.
-- [ ] On `no`: exit without writing.
-- [ ] Document marker format, hash-computation rule, and "final line only" semantics in `review-plan/SKILL.md`.
-- [ ] Phase 1 manual verification (this phase only): run `/review-plan` on a scratch plan, answer `yes`, confirm the marker line is appended as the final line and has the expected format. Edit the plan body (non-marker line), re-run `/review-plan`, answer `yes`, confirm marker is replaced (not duplicated) and hash updated. Stale-detection verification is deferred to Phase 6 because it requires `/conduct` preflight.
+- [x] **Resolve contract conflict first.** `review-plan/SKILL.md:142,151` currently says "Do NOT modify the plan automatically" / "Never modify the plan file directly." Rewrite both lines to carve out the marker footer: "Never modify the plan *body* automatically; findings drive a conversation. The sole exception is the review marker footer — a single trailing comment line appended after the user explicitly accepts or waives findings."
+- [x] After the findings-presentation step, add a prompt: "Are findings addressed (yes/waive/no)?"
+- [x] On `yes` or `waive`: compute the plan hash per the rule in `/conduct` Preflight (strip only the final line if it matches the marker regex, then `git hash-object`), append or replace the final line with `<!-- reviewed: YYYY-MM-DD @ <hash> -->`.
+- [x] On `no`: exit without writing.
+- [x] Document marker format, hash-computation rule, and "final line only" semantics in `review-plan/SKILL.md`.
+- [x] Phase 1 manual verification (this phase only): run `/review-plan` on a scratch plan, answer `yes`, confirm the marker line is appended as the final line and has the expected format. Edit the plan body (non-marker line), re-run `/review-plan`, answer `yes`, confirm marker is replaced (not duplicated) and hash updated. Stale-detection verification is deferred to Phase 6 because it requires `/conduct` preflight.
 
 ### Phase 2: `/dev-plan` template extension
 
@@ -211,9 +211,9 @@ All reports use two distinct phase identifiers:
 **Test files:** none
 **Test command:** none
 
-- [ ] Extend template Phase sections with three optional slots immediately under each `### Phase N:` heading: `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` ``
-- [ ] Update `dev-plan/SKILL.md` to explain these slots and when to fill them (omit when trivially inferable; required for `/conduct`-driven phases)
-- [ ] Update this plan (20260422-feature-conduct-skill.md) to include the slots for its own phases (already done in this v3 draft — verify)
+- [x] Extend template Phase sections with three optional slots immediately under each `### Phase N:` heading: `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` ``
+- [x] Update `dev-plan/SKILL.md` to explain these slots and when to fill them (omit when trivially inferable; required for `/conduct`-driven phases)
+- [x] Update this plan (20260422-feature-conduct-skill.md) to include the slots for its own phases (already done in this v3 draft — verify)
 
 ### Phase 3: Conduct skill scaffolding
 
@@ -221,12 +221,12 @@ All reports use two distinct phase identifiers:
 **Test files:** none (templates are verified in Phase 6)
 **Test command:** `grep -E '/(deep-review|fan-out|review-plan|conduct)' .claude/skills/conduct/*.md && echo FAIL || echo OK`
 
-- [ ] Create `.claude/skills/conduct/` directory
-- [ ] Write `SKILL.md` with frontmatter (name, description, trigger phrases: "step through plan", "walk phases", "delegate phase implementation", "conduct plan", "run the plan") and the workflow body from the Requirements section
-- [ ] Write `implementer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_TITLE}}`, `{{PRIOR_DIFF}}`, `{{TEST_FAILURES}}`, `{{ITERATION}}`, `{{BASE_SHA}}`. Includes: "do not invoke slash commands or skills"; "stage with `git add`, do not commit"; final JSON report schema
-- [ ] Write `test-writer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_TITLE}}`, `{{EXISTING_TESTS}}`, `{{BASE_SHA}}`. Same directives + test-writer JSON schema
-- [ ] Write `reviewer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{DIFF}}`. One-shot, reviewer JSON schema
-- [ ] Verify: run the `grep` test command above to confirm no prompt references skill-spawning slash commands
+- [x] Create `.claude/skills/conduct/` directory
+- [x] Write `SKILL.md` with frontmatter (name, description, trigger phrases: "step through plan", "walk phases", "delegate phase implementation", "conduct plan", "run the plan") and the workflow body from the Requirements section
+- [x] Write `implementer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_TITLE}}`, `{{PRIOR_DIFF}}`, `{{TEST_FAILURES}}`, `{{ITERATION}}`, `{{BASE_SHA}}`. Includes: "do not invoke slash commands or skills"; "stage with `git add`, do not commit"; final JSON report schema
+- [x] Write `test-writer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_TITLE}}`, `{{EXISTING_TESTS}}`, `{{BASE_SHA}}`. Same directives + test-writer JSON schema
+- [x] Write `reviewer-prompt.md` template with placeholders `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{DIFF}}`. One-shot, reviewer JSON schema
+- [x] Verify: run the `grep` test command above to confirm no prompt references skill-spawning slash commands
 
 ### Phase 4: Conductor logic in SKILL.md
 
@@ -234,10 +234,10 @@ All reports use two distinct phase identifiers:
 **Test files:** none (manual verification)
 **Test command:** none (Phase 6 exercises this)
 
-- [ ] Document preflight algorithm: plan path resolution, marker read + stale check (hash recompute), phase parsing regex, state-file load
-- [ ] Document per-phase workflow (steps 1–9 from Requirements) including the parallel-vs-sequential heuristic, subagent spawn, JSON report parse-or-retry-once, fix loop N=3, pre-commit-hook-as-iteration routing, boundary commit, handback message with literal `Run: /conduct --resume` line
-- [ ] Document abort semantics (`--abort-phase` = stash; `--abort` = drop state)
-- [ ] Document timeouts and CLI flags (`--agent-timeout`, `--test-timeout`, `--max-iterations`, `--test-cmd`, `--resume`, `--status`, `--abort`, `--abort-phase`)
+- [x] Document preflight algorithm: plan path resolution, marker read + stale check (hash recompute), phase parsing regex, state-file load
+- [x] Document per-phase workflow (steps 1–9 from Requirements) including the parallel-vs-sequential heuristic, subagent spawn, JSON report parse-or-retry-once, fix loop N=3, pre-commit-hook-as-iteration routing, boundary commit, handback message with literal `Run: /conduct --resume` line
+- [x] Document abort semantics (`--abort-phase` = stash; `--abort` = drop state)
+- [x] Document timeouts and CLI flags (`--agent-timeout`, `--test-timeout`, `--max-iterations`, `--test-cmd`, `--resume`, `--status`, `--abort`, `--abort-phase`)
 
 ### Phase 5: State file + lockfile
 
@@ -245,14 +245,14 @@ All reports use two distinct phase identifiers:
 **Test files:** `.claude/skills/conduct/tests/test_parser.py`, `.claude/skills/conduct/tests/test_marker.py`, `.claude/skills/conduct/tests/test_state.py`, `.claude/skills/conduct/tests/test_skill_spawn_grep.sh`
 **Test command:** `python3 -m pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`
 
-- [ ] Document state file schema in `SKILL.md` exactly as specified in Requirements §"State file"
-- [ ] Document path resolution: `$(git rev-parse --show-toplevel)/.conduct/state-$(basename <plan>).json`
-- [ ] Write `lock.py` helper: `fcntl.flock` on lockfile fd; 1 h stale-break rule; atomic `mkdir` fallback if Python is unavailable
-- [ ] Add `.conduct/` to `.gitignore`
-- [ ] Write `tests/test_parser.py`: phase regex on synthetic headings (colons, parens, non-contiguous numbering, already-completed phases); `Test command:` regex (backticks, multiple matches, malformed)
-- [ ] Write `tests/test_marker.py`: hash-strip idempotency (marker in final line strips; marker-shaped lines in body do NOT strip); round-trip through append-or-replace
-- [ ] Write `tests/test_state.py`: state-file schema round-trip; lockfile acquisition/release; stale-lock break
-- [ ] Write `tests/test_skill_spawn_grep.sh`: greps `.claude/skills/conduct/*.md` for skill-spawn phrases (`/deep-review`, `/fan-out`, `/review-plan`) used as actions — exits non-zero on any match outside a designated allow-list (e.g., "do NOT invoke /deep-review" is allowed prose)
+- [x] Document state file schema in `SKILL.md` exactly as specified in Requirements §"State file"
+- [x] Document path resolution: `$(git rev-parse --show-toplevel)/.conduct/state-$(basename <plan>).json`
+- [x] Write `lock.py` helper: `fcntl.flock` on lockfile fd; 1 h stale-break rule; atomic `mkdir` fallback if Python is unavailable
+- [x] Add `.conduct/` to `.gitignore`
+- [x] Write `tests/test_parser.py`: phase regex on synthetic headings (colons, parens, non-contiguous numbering, already-completed phases); `Test command:` regex (backticks, multiple matches, malformed)
+- [x] Write `tests/test_marker.py`: hash-strip idempotency (marker in final line strips; marker-shaped lines in body do NOT strip); round-trip through append-or-replace
+- [x] Write `tests/test_state.py`: state-file schema round-trip; lockfile acquisition/release; stale-lock break
+- [x] Write `tests/test_skill_spawn_grep.sh`: greps `.claude/skills/conduct/*.md` for skill-spawn phrases (`/deep-review`, `/fan-out`, `/review-plan`) used as actions — exits non-zero on any match outside a designated allow-list (e.g., "do NOT invoke /deep-review" is allowed prose)
 
 ### Phase 6: Manual verification
 
@@ -290,11 +290,11 @@ All reports use two distinct phase identifiers:
 
 Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code ship together.
 
-- [ ] `AGENTS.md`: add `/conduct` to skill index; reword the depth-invariant paragraph to preserve existing vocabulary: "Workers launched in a fresh Claude subprocess (e.g., via `fan-out.sh spawn`) start a new orchestrator/worker tree and may themselves act as orchestrators; the one-level rule applies per-tree."
-- [ ] `.claude/skills/dev-plan/SKILL.md`: add pointer to `/conduct` as the "execute a reviewed plan" companion; mention the per-phase `Impl files:` / `Test files:` / `Test command:` slots
-- [ ] `.claude/skills/review-plan/SKILL.md`: document the marker footer it writes and that `/conduct` consumes it
-- [ ] `.claude/skills/fan-out/SKILL.md`: note that a fan-out-spawned subprocess may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out
-- [ ] Do NOT touch `.codex/skills/`
+- [x] `AGENTS.md`: add `/conduct` to skill index; reword the depth-invariant paragraph to preserve existing vocabulary: "Workers launched in a fresh Claude subprocess (e.g., via `fan-out.sh spawn`) start a new orchestrator/worker tree and may themselves act as orchestrators; the one-level rule applies per-tree."
+- [x] `.claude/skills/dev-plan/SKILL.md`: add pointer to `/conduct` as the "execute a reviewed plan" companion; mention the per-phase `Impl files:` / `Test files:` / `Test command:` slots
+- [x] `.claude/skills/review-plan/SKILL.md`: document the marker footer it writes and that `/conduct` consumes it
+- [x] `.claude/skills/fan-out/SKILL.md`: note that a fan-out-spawned subprocess may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out
+- [x] Do NOT touch `.codex/skills/`
 
 ## Technical Specifications
 
