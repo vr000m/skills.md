@@ -73,7 +73,11 @@ def parse_phases(plan_text: str) -> list[Phase]:
             continue
         if current is None:
             continue
-        if line.startswith("### ") or line.startswith("## "):
+        # Only a top-level (`## `) section boundary ends the current phase. A
+        # new phase heading is already matched above. A non-Phase `### ` line
+        # (e.g. a `### Notes` subheading inside the phase body) is absorbed as
+        # body content rather than silently dropping the rest of the phase.
+        if line.startswith("## "):
             current = None
             continue
         current.body_lines.append(line)

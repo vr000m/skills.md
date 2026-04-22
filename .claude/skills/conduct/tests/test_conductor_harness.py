@@ -162,7 +162,7 @@ def _test_report() -> str:
         "test_files_added": ["tests/test_a.py"],
         "test_commands": ["true"],
         "coverage_summary": "stub",
-        "flags": {"blocked": False, "needs_impl_clarification": []},
+        "flags": {"blocked": False, "needs_impl_clarification": None},
     }
     return f"```json\n{json.dumps(payload)}\n```"
 
@@ -352,7 +352,7 @@ def test_test_contract_mismatch_routes_iteration_1_to_test_writer(repo):
             "test_files_added": ["tests/test_a.py"],
             "test_commands": ["true"],
             "coverage_summary": "fixed",
-            "flags": {"blocked": False, "needs_impl_clarification": []},
+            "flags": {"blocked": False, "needs_impl_clarification": None},
         }
         return f"```json\n{json.dumps(payload)}\n```"
 

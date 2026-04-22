@@ -128,6 +128,59 @@ def test_parse_phases_no_checklist_header_returns_empty():
     assert parse_phases(plan) == []
 
 
+def test_parse_phases_non_phase_h3_inside_body_does_not_end_phase():
+    # Regression: a non-Phase `### Notes` subheading inside a phase body used
+    # to silently reset current=None, dropping the rest of the phase. Now it
+    # is absorbed as body content and the phase's checkboxes + slots remain
+    # reachable.
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: With subheading
+
+        **Impl files:** src/a.py
+        **Test command:** `pytest`
+
+        ### Notes
+
+        Some prose.
+
+        - [x] done one
+        - [x] done two
+
+        ## Next Section
+        """
+    )
+    phases = parse_phases(plan)
+    assert len(phases) == 1
+    assert phases[0].impl_files == ["src/a.py"]
+    assert phases[0].test_command == "pytest"
+    assert phases[0].is_complete is True
+
+
+def test_parse_phases_h2_still_ends_phase_scope():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: Bounded
+
+        - [ ] inside phase
+
+        ## Technical Specifications
+
+        - [ ] outside phase, must not count toward phase 1
+        """
+    )
+    phases = parse_phases(plan)
+    assert len(phases) == 1
+    assert phases[0].is_complete is False
+    # Only the in-phase checkbox contributes.
+    assert sum(1 for line in phases[0].body_lines if "inside phase" in line) == 1
+    assert not any("outside phase" in line for line in phases[0].body_lines)
+
+
 def test_files_overlap_detects_same_path():
     assert files_overlap(["src/a.py"], ["src/a.py"]) is True
 

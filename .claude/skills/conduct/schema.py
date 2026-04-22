@@ -46,9 +46,29 @@ _ROLE_REQUIRED: dict[str, dict[str, type | tuple[type, ...]]] = {
         "test_commands": list,
         "coverage_summary": str,
     },
+    # Reviewer is one-shot and advisory: no flag-driven branching in the
+    # conductor, and reviewer-prompt.md does not emit a flags object. Keep the
+    # required set narrow so a well-formed reviewer report passes validation.
     "reviewer": {
-        **_COMMON_REQUIRED,
+        "role": str,
+        "phase_position": int,
+        "phase_label": str,
         "findings": list,
+    },
+}
+
+# Role-specific flag substructure. Enforced only when the role emits flags
+# (implementer + test-writer). The conductor branches on these keys, so a
+# missing key is a real runtime failure — not an evolving-prompt edge case.
+_ROLE_FLAGS_REQUIRED: dict[str, dict[str, type | tuple[type, ...]]] = {
+    "implementer": {
+        "blocked": bool,
+        "test_contract_mismatch": bool,
+        "needs_test_coverage": list,
+    },
+    "test-writer": {
+        "blocked": bool,
+        "needs_impl_clarification": (str, type(None)),
     },
 }
 
@@ -102,11 +122,25 @@ def validate_report(obj: dict[str, Any], expected_role: str) -> None:
             raise SchemaError(f"missing required key: {key!r}")
         if not isinstance(obj[key], expected_type):
             actual = type(obj[key]).__name__
-            want = (
-                expected_type.__name__
-                if isinstance(expected_type, type)
-                else " or ".join(t.__name__ for t in expected_type)
-            )
+            want = _type_name(expected_type)
             raise SchemaError(
                 f"key {key!r} has wrong type: expected {want}, got {actual}"
             )
+    flag_schema = _ROLE_FLAGS_REQUIRED.get(expected_role)
+    if flag_schema is not None:
+        flags = obj["flags"]
+        for fkey, fexpected in flag_schema.items():
+            if fkey not in flags:
+                raise SchemaError(f"missing required flag: {fkey!r}")
+            if not isinstance(flags[fkey], fexpected):
+                actual = type(flags[fkey]).__name__
+                want = _type_name(fexpected)
+                raise SchemaError(
+                    f"flag {fkey!r} has wrong type: expected {want}, got {actual}"
+                )
+
+
+def _type_name(t: type | tuple[type, ...]) -> str:
+    if isinstance(t, type):
+        return t.__name__
+    return " or ".join(x.__name__ for x in t)
