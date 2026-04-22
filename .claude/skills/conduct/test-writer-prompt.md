@@ -44,7 +44,9 @@ Base commit for this phase: {{BASE_SHA}}.
 
 ## When Done
 
-Stage every test file you changed. Then emit a final fenced ```json block matching this schema exactly. The block must be the last content in your output; nothing else may follow it.
+Stage every test file you changed. Then emit a final fenced ```json block matching this schema exactly.
+
+Output discipline: your reply must contain **exactly one** fenced ```json block, and it MUST be the final content of your output — no prose, code, or whitespace after the closing fence. The conductor parses the last fenced ```json block as your report; any extra json fence (even an example) shifts the anchor and corrupts the report.
 
 ```json
 {

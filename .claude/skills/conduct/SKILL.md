@@ -74,7 +74,7 @@ The plan MUST end with a trailing marker footer written by `/review-plan` after 
 
 ### 3. Pre-commit health check
 
-Run the repo's pre-commit / lint in non-fix mode on the current tree, in this order: `pre-commit run --all-files`, then `make lint`, then `npm run lint`, then `ruff check .`. If none exist, skip. If the check fails → hard-stop with: `Tree has pre-existing lint/hook failures; fix them before running /conduct`.
+Run the repo's pre-commit / lint in non-fix mode on the current tree, in this order: `pre-commit run --all-files`, then `make lint`, then `npm run lint`, then `ruff check .`. If none exist, skip. If the check fails → hard-stop with: `Tree has pre-existing lint/hook failures; fix them before running this skill`.
 
 This prevents subagent fix-loops from chasing issues they didn't introduce.
 
@@ -82,9 +82,9 @@ This prevents subagent fix-loops from chasing issues they didn't introduce.
 
 `<repo-root>/.conduct/state-<plan-basename>.json`, where repo-root comes from `git rev-parse --show-toplevel`.
 
-- If present and `--resume`: load and continue from `phase_index`.
+- If present and `--resume`: load and continue from `phase_index`. Refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
 - If present without `--resume`: warn, print state summary, suggest `--resume` or `--abort-run`, exit.
-- If absent: initialise with `base_sha = git rev-parse HEAD`, `phase_index = 0`, `status = "running"`.
+- If absent: initialise with `base_sha = git rev-parse HEAD`, `phase_index = 0`, `iteration_count = 0`, `status = "running"`.
 
 Acquire an advisory lock on `.conduct/state-<plan-basename>.json.lock` before any write (see `lock.py` shipped with this skill).
 
@@ -101,6 +101,8 @@ Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthes
 ## Per-Phase Workflow
 
 For each unfinished phase, execute steps 1–9. Acquire the state-file lock before any state mutation.
+
+**On entering a new phase**: reset `state.iteration_count = 0` and persist before Step 1. The fix-loop cap is per-phase, not per-run; without this reset, phase N starts already counting iterations spent on phase N−1 and the cap fires prematurely.
 
 ### Step 1 — Parse phase contract
 
@@ -166,7 +168,8 @@ No classifier. On any failure (test failure OR pre-commit hook failure at the bo
 
 - Increment `state.iteration_count`. Persist state immediately (crash recovery).
 - If `iteration_count > N`: set `state.status = "blocked"`, handback with message `Phase <label> stalled after <N> iterations; see .conduct/state-<plan>.json for diff and failure history.` Do not auto-advance.
-- Else respawn the implementer with `{{ITERATION}}` = new count, `{{PRIOR_DIFF}}` = staged diff from previous attempt, `{{TEST_FAILURES}}` = full runner output (or hook output, if the failure came from the boundary commit).
+- Else **reset the index before respawn**: capture `git diff --cached` into `{{PRIOR_DIFF}}`, then run `git reset` (mixed, no `--hard`) to clear the staging area. The respawned implementer starts from a clean index with the prior diff visible only inside its prompt — this prevents stale staged content from a failed attempt silently mixing into the next iteration.
+- Respawn the implementer with `{{ITERATION}}` = new count, `{{PRIOR_DIFF}}` = the captured diff, `{{TEST_FAILURES}}` = full runner output (or hook output, if the failure came from the boundary commit).
 - Exception: if the previous implementer report set `flags.test_contract_mismatch: true`, respawn the **test-writer** instead on this iteration, same inputs. Reset the flag handling for the iteration after that (respawn implementer again unless the next report flips the flag again).
 
 ### Step 7 — Optional mid-phase reviewer (one-shot)
@@ -177,7 +180,7 @@ Trigger conditions: staged diff > 200 lines, OR > 3 files touched, OR phase tagg
 
 After tests pass (or were skipped with warning):
 
-1. **Rogue-commit check.** Compare `git rev-parse HEAD` to `state.base_sha` (for phase 1) or the last completed phase's `commit_sha`. If HEAD advanced, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase summary, set `state.status = "awaiting_user"` with a warning, handback.
+1. **Rogue-commit check.** Compare `git rev-parse HEAD` to the phase-start baseline: `state.resume_base_sha` if this run started from `--resume`, otherwise `state.base_sha` (for phase 1) or the last completed phase's `commit_sha`. If HEAD advanced beyond the baseline _during this phase's subagent work_, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase summary, set `state.status = "awaiting_user"` with a warning, handback. (User commits made during a previous handback are absorbed into `resume_base_sha` at preflight, so they do not trip this check.)
 2. Otherwise run `git commit -m "conduct: phase <label> — <phase title>"`. Commit author = current git user (no impersonation).
 3. If the pre-commit hook fails, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
 4. On success, record the new `HEAD` SHA in `state.completed_phases[*].commit_sha`.
@@ -220,6 +223,7 @@ Schema:
   "plan_path": "docs/dev_plans/20260422-feature-conduct-skill.md",
   "plan_content_hash": "<sha1 of plan with marker stripped>",
   "base_sha": "<git sha before phase 1>",
+  "resume_base_sha": "<git sha at the start of this --resume invocation; absent on first run>",
   "phase_index": 3,
   "current_phase_title": "...",
   "completed_phases": [

@@ -145,3 +145,14 @@ def test_files_overlap_missing_slot_is_false():
     assert files_overlap(None, ["tests/test_a.py"]) is False
     assert files_overlap(["src/a.py"], None) is False
     assert files_overlap([], ["x"]) is False
+
+
+def test_files_overlap_globs_are_conservative():
+    # Cannot prove disjointness against glob entries → overlap True so
+    # caller falls back to sequential.
+    assert files_overlap(["src/*.py"], ["tests/test_a.py"]) is True
+    assert files_overlap(["src/a.py"], ["tests/**/*.py"]) is True
+    assert files_overlap(["src/[ab].py"], ["docs/x.md"]) is True
+    assert files_overlap(["src/?.py"], ["docs/x.md"]) is True
+    # Same glob on both sides → still overlap (was the silent-bug case).
+    assert files_overlap(["src/*.py"], ["src/*.py"]) is True

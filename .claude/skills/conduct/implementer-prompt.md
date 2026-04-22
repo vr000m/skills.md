@@ -42,6 +42,8 @@ Base commit for this phase: {{BASE_SHA}}.
 
 ## Fix-Loop Context
 
+The conductor has cleared the staging area before spawning you. Do not assume any files are pre-staged from a prior attempt — the prior attempt's changes appear only in `{{PRIOR_DIFF}}` below as reference material. Re-stage every file you change, even if you intend to reproduce a path that the previous attempt also touched.
+
 {{PRIOR_DIFF}}
 
 {{TEST_FAILURES}}
@@ -50,7 +52,9 @@ If the prior test failures indicate that the tests are asserting behaviour that 
 
 ## When Done
 
-Stage every file you changed. Then emit a final fenced ```json block matching this schema exactly. The block must be the last content in your output; nothing else may follow it.
+Stage every file you changed. Then emit a final fenced ```json block matching this schema exactly.
+
+Output discipline: your reply must contain **exactly one** fenced ```json block, and it MUST be the final content of your output — no prose, code, or whitespace after the closing fence. The conductor parses the last fenced ```json block as your report; any extra json fence (even an example) shifts the anchor and corrupts the report.
 
 ```json
 {

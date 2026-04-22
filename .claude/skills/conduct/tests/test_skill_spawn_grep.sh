@@ -10,7 +10,7 @@ set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-FORBIDDEN='/(deep-review|fan-out|review-plan)'
+FORBIDDEN='/(deep-review|fan-out|review-plan|conduct)'
 
 fail=0
 
@@ -20,13 +20,19 @@ while IFS= read -r -d '' file; do
         line_content="${match#*:*:}"
 
         # Allow if token is inside backticks, e.g. `/review-plan`.
-        if [[ "$line_content" =~ \`/((deep-review)|(fan-out)|(review-plan))\` ]]; then
+        if [[ "$line_content" =~ \`/((deep-review)|(fan-out)|(review-plan)|(conduct))\` ]]; then
+            continue
+        fi
+
+        # Allow path-form usage like ".claude/skills/conduct/..." — the slash
+        # following the token means it's a directory path, not an invocation.
+        if [[ "$line_content" =~ /((deep-review)|(fan-out)|(review-plan)|(conduct))/ ]]; then
             continue
         fi
 
         # Allow instructional prose telling the *user* to run the other skill,
         # e.g. `Run: /review-plan <plan-path>` emitted at preflight failure.
-        if [[ "$line_content" =~ Run:[[:space:]]*/((deep-review)|(fan-out)|(review-plan)) ]]; then
+        if [[ "$line_content" =~ Run:[[:space:]]*/((deep-review)|(fan-out)|(review-plan)|(conduct)) ]]; then
             continue
         fi
 

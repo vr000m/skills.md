@@ -119,14 +119,29 @@ def _all_checkboxes_ticked(body_lines: list[str]) -> bool:
     return total > 0 and ticked == total
 
 
-def files_overlap(impl: list[str] | None, test: list[str] | None) -> bool:
-    """Return True if declared impl and test paths share any path prefix.
+_GLOB_CHARS = ("*", "?", "[")
 
-    Conservative: if either list is missing or empty, returns False (caller
-    decides fallback policy — typically 'sequential because missing slot').
+
+def _has_glob(path: str) -> bool:
+    return any(ch in path for ch in _GLOB_CHARS)
+
+
+def files_overlap(impl: list[str] | None, test: list[str] | None) -> bool:
+    """Return True if declared impl and test paths could share any file.
+
+    Conservative on globs: if any entry contains ``*``, ``?``, or ``[``, we
+    cannot prove disjointness with literal-prefix matching, so we report
+    overlap → caller falls back to sequential. Callers wanting precise glob
+    expansion should resolve against ``git ls-files`` first and pass the
+    materialised list in.
+
+    If either list is missing or empty, returns False (caller decides fallback
+    policy — typically 'sequential because missing slot').
     """
     if not impl or not test:
         return False
+    if any(_has_glob(p) for p in impl) or any(_has_glob(p) for p in test):
+        return True
     impl_set = {path.rstrip("/") for path in impl}
     test_set = {path.rstrip("/") for path in test}
     for a in impl_set:
