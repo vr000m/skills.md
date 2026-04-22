@@ -14,6 +14,14 @@ Subagent prompt templates live alongside this file:
 - `test-writer-prompt.md`
 - `reviewer-prompt.md`
 
+Helper modules for preflight and state handling:
+
+- `parser.py` — phase-heading regex, `Test command:` regex, phase-overlap check.
+- `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
+- `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
+
+Deterministic tests for all three under `tests/` (run via `python3 -m pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`). Main Claude can call these helpers from Bash or re-implement the algorithm inline — both are documented.
+
 ## Delegation Pattern
 
 Delegation depth from this skill is exactly 1: conduct → workers. Workers never spawn further subagents. This skill is invoked directly by the user as a top-level skill, OR inside a subprocess spawned by `/fan-out` that re-baselines depth at the process boundary. It is never invoked as an `Agent` subagent.
