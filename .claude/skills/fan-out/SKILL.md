@@ -12,6 +12,8 @@ Dispatch independent tasks to parallel Claude agents, each in an isolated git wo
 
 Spawned agents are one level deep — they implement their assigned task and must not themselves invoke `/fan-out` or spawn further parallel agents. This keeps the worktree/process model and merge accounting tractable. Agents may still use the `Agent` tool for in-process subagent delegation within their own task (e.g., calling `/review-plan` on a file), but they cannot start a new fan-out tier.
 
+A fan-out-spawned Claude subprocess may invoke `/conduct` as its top-level skill — the subprocess boundary in `fan-out.sh` starts a new orchestrator tree, so `fan-out → (subprocess) → conduct → {implementer, test-writer}` stays within the per-tree one-level rule. `/conduct` itself does not fan out; keep parallelism at the outer layer.
+
 ## Usage
 
 - `/fan-out docs/dev_plans/20260206-feature-xyz.md` -- Parse plan, fan out independent tasks

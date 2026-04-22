@@ -84,7 +84,7 @@ Keep it short, concrete, and specific. If a plan references external standards, 
 3. Define phases and acceptance criteria
 4. Identify files to modify, potential risks, and any Review Focus items that should be written into the plan
 5. Run `/review-plan` to audit for gaps, undocumented assumptions, missing constraints, and Review Focus coverage before coding starts
-6. Address review findings, then proceed to implementation (or `/fan-out` for parallel tasks)
+6. Address review findings, then proceed to implementation. For a linear multi-phase plan, run `/conduct <plan>` to walk phases with per-phase clean-context subagents (fill the `**Impl files:**`, `**Test files:**`, and `**Test command:**` slots so the conductor can decide spawn strategy and run tests). Use `/fan-out` when phases are independent enough to parallelise.
 
 ### During Implementation
 1. Update checkboxes as tasks complete

@@ -43,14 +43,15 @@ Global is authoritative, repo is a mirror:
 Recommended development workflow using skills:
 
 1. `/dev-plan create feature xyz` — Create the plan
-2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
+2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete); on acceptance, writes a review marker footer consumed by `/conduct`
 3. Address review findings, update plan as needed
-4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
-5. `/deep-review` — Run a multi-lens code review after implementation and before merge
+4. `/conduct` — Walk a reviewed linear plan phase by phase, delegating implementation + tests per phase to clean-context subagents (pair with `/fan-out` at the outer layer when phases themselves fan out)
+5. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
+6. `/deep-review` — Run a multi-lens code review after implementation and before merge
 
 Skills delegate heavy phases (research, analysis, report generation) to subagents and return only the structured result to the main context. This keeps main context lean and preserves token budgets on long sessions. User-facing I/O (confirmations, applying edits, presenting results) stays in the main context.
 
-**Delegation depth: one level.** A skill (the orchestrator) may spawn workers — `Agent`-tool subagents in `deep-review` and `review-plan`, worktree processes in `fan-out` — but those workers must not themselves spawn further workers. Keeping a flat orchestrator/worker tree makes context isolation, result aggregation, and (for fan-out) merge accounting tractable. This mirrors the Claude Managed Agents `callable_agents` model, where a coordinator can call other agents but those agents cannot call agents of their own.
+**Delegation depth: one level per orchestrator tree.** A skill (the orchestrator) may spawn workers — `Agent`-tool subagents in `deep-review`, `review-plan`, and `conduct`, worktree processes in `fan-out` — but those workers must not themselves spawn further workers within the same tree. Workers launched in a fresh Claude subprocess (e.g., via `fan-out.sh spawn`) start a new orchestrator/worker tree and may themselves act as orchestrators; the one-level rule applies per-tree. Keeping a flat orchestrator/worker tree makes context isolation, result aggregation, and (for fan-out) merge accounting tractable. This mirrors the Claude Managed Agents `callable_agents` model, where a coordinator can call other agents but those agents cannot call agents of their own.
 
 ## Review Checklist
 
