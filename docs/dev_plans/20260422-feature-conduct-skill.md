@@ -494,3 +494,4 @@ _Fill when complete._
 - **Skill namespacing** (`workflow:dev-plan`, `workflow:conduct`, …) — evaluate after conduct proves the workflow.
 - **Codex parity** — user to assess separately.
 - **LLM-based fix-loop classifier** — current design leans on the implementer's self-reported flag. If misrouting is common in practice, consider a tiny classifier call.
+<!-- reviewed: 2026-04-22 @ 54b56d3e251447fa1deda3979177bd9d60098a4c -->
