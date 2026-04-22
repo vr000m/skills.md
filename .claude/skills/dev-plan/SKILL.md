@@ -57,7 +57,7 @@ Every plan must include these sections (see template.md for full format):
 1. **Header** - Status, assignee, priority, branch, dates, objective
 2. **Context** - Background, why this work is needed
 3. **Requirements** - Specific requirements and constraints
-4. **Implementation Checklist** - Phased breakdown with checkboxes
+4. **Implementation Checklist** - Phased breakdown with checkboxes. Each phase may include three optional contract slots directly under the heading — `**Impl files:**`, `**Test files:**`, `**Test command:**` (in backticks) — which `/conduct` reads to decide how to spawn subagents and run tests. Omit when the phase is not `/conduct`-driven.
 5. **Technical Specifications** - Files to modify, interfaces, architecture decisions, integration seams
 6. **Testing Notes** - Test approach and results
 7. **Issues & Solutions** - Problems encountered and how resolved
