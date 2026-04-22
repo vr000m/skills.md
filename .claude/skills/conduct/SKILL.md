@@ -19,6 +19,8 @@ Helper modules for preflight and state handling:
 - `parser.py` — phase-heading regex, `Test command:` regex, phase-overlap check.
 - `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
 - `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
+- `schema.py` — last-fenced-block extraction + role-specific report validation (raises `SchemaError`). Stdlib only.
+- `runner.py` — test-command subprocess wrapper with portable wall-clock timeout via `subprocess.run(timeout=...)`. Returns `TestResult(returncode, output, timed_out, duration_seconds)`.
 
 Deterministic tests for all three under `tests/` (run via `uvx pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`). Main Claude can call these helpers from Bash or re-implement the algorithm inline — both are documented.
 
@@ -146,8 +148,8 @@ Spawn via the `Agent` tool, `subagent_type: general-purpose`, with the filled te
 Each subagent returns a final fenced ` ```json ` block. Parse rules:
 
 - **Anchor on the LAST fenced `json` block** in the output, not the first. The plan or prompt body may contain schema examples; only the terminal block is the report.
-- Validate against the role schema (required keys: `role`, `phase_position`, `phase_label`, `iteration` for impl/test roles; role-specific fields; `flags` object).
-- If the block is missing or fails schema validation → set `state.status = "schema_error"`, record which subagent failed and the raw output tail in state, handback to the user. Do NOT respawn. A clean-context respawn cannot consume "your last output was malformed" because the fresh subagent has no memory of the prior attempt.
+- Validate via `schema.parse_report(text, expected_role)` — this performs the last-block extraction, JSON parse, and role-specific schema check (required keys: `role`, `phase_position`, `phase_label`, `iteration` for impl/test roles; role-specific fields; `flags` object). Extra keys are allowed so prompts can evolve without breaking older conductors.
+- If `parse_report` raises `SchemaError` → set `state.status = "schema_error"`, record which subagent failed, the error message, and the raw output tail in state, handback to the user. Do NOT respawn. A clean-context respawn cannot consume "your last output was malformed" because the fresh subagent has no memory of the prior attempt.
 
 ### Step 5 — Run tests
 
@@ -158,7 +160,7 @@ Resolve the test command in order:
 3. Repo default: `package.json` `scripts.test`, `pyproject.toml` `[tool.pytest.ini_options]`, or `Makefile` `test` target.
 4. None available → emit warning, skip tests, set `state.last_summary` with the skip flag, proceed directly to Step 8 (commit boundary).
 
-Run the resolved command wrapped in `timeout <secs> <cmd>` (`--test-timeout`, default 300). Detect the timeout binary: `timeout` on Linux, `gtimeout` on macOS via Homebrew coreutils. If neither is available, warn and run without wall-clock enforcement.
+Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The wall clock is enforced by Python's `subprocess.run(timeout=...)` so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
 
 On non-zero exit → Step 6. On zero exit → Step 7.
 
