@@ -97,14 +97,15 @@ Schema:
   "plan_path": "docs/dev_plans/...",
   "plan_content_hash": "<sha1 of plan with marker stripped>",
   "base_sha": "<git sha before phase 1>",
+  "resume_base_sha": "<git sha at the start of this --resume invocation; absent on first run>",
   "phase_index": 3,
   "current_phase_title": "...",
   "completed_phases": [
-    { "index": 1, "title": "...", "commit_sha": "...", "tests": "passed", "iterations": 1 }
+    { "index": 1, "label": "1", "title": "...", "commit_sha": "...", "tests": "passed", "iterations": 1 }
   ],
   "last_summary": "...",
   "iteration_count": 0,
-  "status": "awaiting_user | running | blocked | complete",
+  "status": "awaiting_user | running | blocked | schema_error | complete",
   "blocker": null
 }
 ```
@@ -236,14 +237,16 @@ All reports use two distinct phase identifiers:
 
 - [x] Document preflight algorithm: plan path resolution, marker read + stale check (hash recompute), phase parsing regex, state-file load
 - [x] Document per-phase workflow (steps 1–9 from Requirements) including the parallel-vs-sequential heuristic, subagent spawn, JSON report parse-or-retry-once, fix loop N=3, pre-commit-hook-as-iteration routing, boundary commit, handback message with literal `Run: /conduct --resume` line
-- [x] Document abort semantics (`--abort-phase` = stash; `--abort` = drop state)
-- [x] Document timeouts and CLI flags (`--agent-timeout`, `--test-timeout`, `--max-iterations`, `--test-cmd`, `--resume`, `--status`, `--abort`, `--abort-phase`)
+- [x] Document pause/abort semantics (`--pause-phase` = stash; `--abort-run` = drop state)
+- [x] Document timeouts and CLI flags (`--test-timeout`, `--max-iterations`, `--test-cmd`, `--resume`, `--status`, `--pause-phase`, `--abort-run`)
 
 ### Phase 5: State file + lockfile
 
-**Impl files:** `.claude/skills/conduct/SKILL.md` (algorithm), `.claude/skills/conduct/lock.py`, `.claude/skills/conduct/tests/` (deterministic tests — see below), `.gitignore`
+**Impl files:** `.claude/skills/conduct/SKILL.md` (algorithm), `.claude/skills/conduct/parser.py`, `.claude/skills/conduct/marker.py`, `.claude/skills/conduct/lock.py`, `.claude/skills/conduct/tests/` (deterministic tests — see below), `.gitignore`
 **Test files:** `.claude/skills/conduct/tests/test_parser.py`, `.claude/skills/conduct/tests/test_marker.py`, `.claude/skills/conduct/tests/test_state.py`, `.claude/skills/conduct/tests/test_skill_spawn_grep.sh`
-**Test command:** `python3 -m pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`
+**Test command:** `uvx pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`
+
+**Test deps**: pytest is invoked through `uvx` so no project-level install is required. Stock `python3 -m pytest` only works if the user has pytest installed system-wide; `uvx` is the documented invocation.
 
 - [x] Document state file schema in `SKILL.md` exactly as specified in Requirements §"State file"
 - [x] Document path resolution: `$(git rev-parse --show-toplevel)/.conduct/state-$(basename <plan>).json`
@@ -411,7 +414,7 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 
 ### Issue 9: Abort semantics hit the destructive-command deny list
 - **Problem**: `git reset --hard` and `git clean` are denied in permissions.
-- **Solution**: `--abort-phase` uses `git stash push -u -m "conduct-abort-phase-<N>"`. User decides to drop the stash.
+- **Solution**: `--pause-phase` uses `git stash push -u -m "conduct-pause-phase-<N>"`; state lives so `--resume` picks up. `--abort-run` drops state without stashing. User decides to drop any stash.
 - **Files affected**: `.claude/skills/conduct/SKILL.md`
 
 ### Issue 10: Missing timeouts leave conductor hung

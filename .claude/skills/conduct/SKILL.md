@@ -20,7 +20,7 @@ Helper modules for preflight and state handling:
 - `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
 - `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
 
-Deterministic tests for all three under `tests/` (run via `python3 -m pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`). Main Claude can call these helpers from Bash or re-implement the algorithm inline — both are documented.
+Deterministic tests for all three under `tests/` (run via `uvx pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`). Main Claude can call these helpers from Bash or re-implement the algorithm inline — both are documented.
 
 ## Delegation Pattern
 
