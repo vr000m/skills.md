@@ -24,6 +24,7 @@ LLM-driven harness both target.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,7 +74,10 @@ class ConductOptions:
     repo_root: Path
     spawn: SpawnFn
     test_runner: TestRunnerFn = run_tests
-    lint_check: LintCheckFn = lambda: None
+    # If None, run_preflight runs ``default_lint_check(repo_root)`` — which
+    # probes for pre-commit / make lint / npm run lint / ruff per SKILL.md
+    # Step 3. Tests inject a stub to bypass real subprocess work.
+    lint_check: Optional[LintCheckFn] = None
     test_cmd_override: Optional[str] = None
     test_timeout: float = 300.0
     max_iterations: int = 3
@@ -149,7 +153,8 @@ def run_preflight(opts: ConductOptions) -> Optional[ConductResult]:
             diagnostic=f"Run: /review-plan {opts.plan_path}",
         )
 
-    lint_diag = opts.lint_check()
+    lint_check = opts.lint_check or (lambda: default_lint_check(opts.repo_root))
+    lint_diag = lint_check()
     if lint_diag:
         return ConductResult(
             status="preflight_fail",
@@ -214,7 +219,117 @@ def _spawn_strategy(phase: Phase) -> tuple[str, str]:
 def _resolve_test_cmd(opts: ConductOptions, phase: Phase) -> Optional[str]:
     if opts.test_cmd_override:
         return opts.test_cmd_override
-    return phase.test_command
+    if phase.test_command:
+        return phase.test_command
+    return _repo_default_test_cmd(opts.repo_root)
+
+
+def detect_lint_command(repo_root: Path) -> Optional[list[str]]:
+    """SKILL.md Preflight Step 3 probe.
+
+    Returns the argv of the first available lint check that applies to this
+    repo, or ``None`` if none apply. Pure detection — does not run anything,
+    so tests can verify the probe order without invoking real subprocesses.
+
+    Probe order:
+      1. ``pre-commit run --all-files`` — needs ``.pre-commit-config.yaml`` and the binary on PATH.
+      2. ``make lint`` — needs a ``Makefile`` with a ``lint:`` target and ``make`` on PATH.
+      3. ``npm run lint`` — needs ``package.json`` with ``scripts.lint`` and ``npm`` on PATH.
+      4. ``ruff check .`` — needs ``ruff`` on PATH and at least one Python signal in repo
+         (``pyproject.toml`` or any ``*.py`` file at the top level).
+    """
+    pcc = repo_root / ".pre-commit-config.yaml"
+    if pcc.exists() and shutil.which("pre-commit"):
+        return ["pre-commit", "run", "--all-files"]
+
+    makefile = repo_root / "Makefile"
+    if makefile.exists() and shutil.which("make"):
+        try:
+            text = makefile.read_text()
+        except OSError:
+            text = ""
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("lint:") or stripped.startswith("lint :"):
+                return ["make", "lint"]
+
+    pkg = repo_root / "package.json"
+    if pkg.exists() and shutil.which("npm"):
+        try:
+            text = pkg.read_text()
+        except OSError:
+            text = ""
+        if '"scripts"' in text and '"lint"' in text:
+            return ["npm", "run", "lint"]
+
+    if shutil.which("ruff"):
+        if (repo_root / "pyproject.toml").exists() or any(repo_root.glob("*.py")):
+            return ["ruff", "check", "."]
+
+    return None
+
+
+def default_lint_check(repo_root: Path) -> Optional[str]:
+    """Run the first available lint check; return its diagnostic on failure.
+
+    Returns ``None`` when no lint tool is available (skip per SKILL.md) OR
+    when the configured check passed. Returns the captured stdout+stderr tail
+    when the check exits non-zero — that text becomes the preflight diagnostic.
+    """
+    argv = detect_lint_command(repo_root)
+    if argv is None:
+        return None
+    proc = subprocess.run(
+        argv, cwd=str(repo_root), capture_output=True, text=True, check=False
+    )
+    if proc.returncode == 0:
+        return None
+    output = (proc.stdout or "") + (proc.stderr or "")
+    cmd = " ".join(argv)
+    return f"{cmd} (exit {proc.returncode}):\n{output[-2000:]}"
+
+
+def _repo_default_test_cmd(repo_root: Path) -> Optional[str]:
+    """SKILL.md Step 5 fallback chain step 3.
+
+    Probes in this order:
+      1. ``package.json`` with a ``scripts.test`` entry → ``npm test``.
+      2. ``pyproject.toml`` with ``[tool.pytest.ini_options]`` → ``uvx pytest``.
+      3. ``Makefile`` with a ``test:`` target → ``make test``.
+
+    Returns ``None`` if none match; the caller treats that as skip-with-warning.
+    Detection is intentionally string-level (no toml/json parse) so the function
+    has zero stdlib-only dependencies and stays safe on partially-valid files.
+    """
+    pkg = repo_root / "package.json"
+    if pkg.exists():
+        try:
+            text = pkg.read_text()
+        except OSError:
+            text = ""
+        if '"scripts"' in text and '"test"' in text:
+            return "npm test"
+
+    pyproject = repo_root / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            text = pyproject.read_text()
+        except OSError:
+            text = ""
+        if "[tool.pytest.ini_options]" in text:
+            return "uvx pytest"
+
+    makefile = repo_root / "Makefile"
+    if makefile.exists():
+        try:
+            text = makefile.read_text()
+        except OSError:
+            text = ""
+        for line in text.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("test:") or stripped.startswith("test :"):
+                return "make test"
+    return None
 
 
 def _phase_baseline(state: dict) -> str:
@@ -450,6 +565,12 @@ def _commit_phase(
         "iterations": state["iteration_count"],
     }
     state.setdefault("completed_phases", []).append(completed)
+    # Clear resume_base_sha after the first successful commit of a resumed
+    # run. SKILL.md Step 8: subsequent phases in the same process use the
+    # previous phase's commit_sha as their baseline. Leaving resume_base_sha
+    # set across phases would make a clean phase 2 trip the rogue-commit check
+    # (HEAD has advanced past the resume baseline by phase 1's own commit).
+    state.pop("resume_base_sha", None)
     return ConductResult(status="running", state=state, summary="")
 
 

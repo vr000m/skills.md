@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import textwrap
 from dataclasses import dataclass, field
@@ -36,8 +37,11 @@ import pytest
 from conductor import (
     ConductOptions,
     SpawnRequest,
+    _repo_default_test_cmd,
     abort_run,
     conduct,
+    default_lint_check,
+    detect_lint_command,
     pause_phase,
 )
 from marker import write_marker
@@ -642,3 +646,232 @@ def test_resume_across_simulated_restart_picks_up_at_next_phase(repo):
     assert r2.status == "awaiting_user"
     labels = [p["label"] for p in r2.state["completed_phases"]]
     assert labels == ["1", "2"]
+
+
+# ---------------------------------------------------------------------------
+# C1: repo-default test-cmd fallback (SKILL.md Step 5)
+# ---------------------------------------------------------------------------
+
+
+def test_repo_default_test_cmd_returns_none_for_bare_repo(tmp_path):
+    assert _repo_default_test_cmd(tmp_path) is None
+
+
+def test_repo_default_test_cmd_picks_npm_when_package_json_has_scripts_test(tmp_path):
+    (tmp_path / "package.json").write_text('{"scripts": {"test": "jest"}}\n')
+    assert _repo_default_test_cmd(tmp_path) == "npm test"
+
+
+def test_repo_default_test_cmd_skips_package_json_without_scripts_test(tmp_path):
+    (tmp_path / "package.json").write_text('{"name": "x"}\n')
+    assert _repo_default_test_cmd(tmp_path) is None
+
+
+def test_repo_default_test_cmd_picks_pytest_when_pyproject_has_pytest_section(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\ntestpaths = ['tests']\n"
+    )
+    assert _repo_default_test_cmd(tmp_path) == "uvx pytest"
+
+
+def test_repo_default_test_cmd_picks_make_test_target(tmp_path):
+    (tmp_path / "Makefile").write_text("build:\n\techo build\ntest:\n\tpytest -q\n")
+    assert _repo_default_test_cmd(tmp_path) == "make test"
+
+
+def test_repo_default_test_cmd_probe_order_prefers_package_json(tmp_path):
+    """All three present → npm wins per SKILL.md Step 5."""
+    (tmp_path / "package.json").write_text('{"scripts": {"test": "jest"}}\n')
+    (tmp_path / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+    (tmp_path / "Makefile").write_text("test:\n\tpytest\n")
+    assert _repo_default_test_cmd(tmp_path) == "npm test"
+
+
+def test_resume_base_sha_is_cleared_after_phase_commits(repo):
+    """C2 regression: leaving resume_base_sha set across phases would make a
+    clean phase 2 trip the rogue-commit check on a multi-phase resumed run.
+
+    Reproduces the failure shape directly: resume on a 2-phase plan with phase
+    1 already marked complete in state, run phase 2, assert state.resume_base_sha
+    is gone afterwards (so any subsequent phase falls through to last-completed
+    commit_sha as baseline).
+    """
+    plan = _scratch_plan(repo, PLAN_TWO_PHASES)
+
+    # Simulate phase 1 having already shipped in a prior run by committing it
+    # here and pre-populating the state file the way conduct() would have.
+    _stage(repo, "src/a.py", "x=1\n")
+    _git(["commit", "-q", "-m", "conduct: phase 1 — First"], repo)
+    phase1_sha = _git(["rev-parse", "HEAD"], repo).stdout.strip()
+
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    (state_dir / "state-20260422-scratch.json").write_text(
+        json.dumps(
+            {
+                "plan_path": str(plan),
+                "base_sha": phase1_sha,  # arbitrary prior baseline
+                "completed_phases": [
+                    {
+                        "index": 0,
+                        "label": "1",
+                        "title": "First",
+                        "commit_sha": phase1_sha,
+                        "tests": "passed",
+                        "iterations": 0,
+                    }
+                ],
+                "iteration_count": 0,
+                "status": "awaiting_user",
+                "blocker": None,
+            }
+        )
+    )
+
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/b.py", "y=2\n"), _impl_report(0, ["src/b.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(
+            plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner, resume=True
+        )
+    )
+    assert result.status == "awaiting_user", result.summary
+    assert "resume_base_sha" not in result.state
+    # Phase 2 was committed normally, no rogue-commit annotation.
+    completed = result.state["completed_phases"]
+    assert [p["label"] for p in completed] == ["1", "2"]
+    assert completed[1]["commit_sha"] is not None
+    assert completed[1].get("rogue_commit_sha") is None
+
+
+# ---------------------------------------------------------------------------
+# C3: default_lint_check probe (SKILL.md Preflight Step 3)
+# ---------------------------------------------------------------------------
+
+
+def _which_stub(present: set[str]):
+    """Returns a shutil.which replacement that reports only ``present``."""
+    return lambda name: f"/usr/bin/{name}" if name in present else None
+
+
+def test_detect_lint_command_returns_none_when_nothing_available(tmp_path, monkeypatch):
+    monkeypatch.setattr("conductor.shutil.which", _which_stub(set()))
+    assert detect_lint_command(tmp_path) is None
+
+
+def test_detect_lint_command_prefers_pre_commit(tmp_path, monkeypatch):
+    (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+    (tmp_path / "Makefile").write_text("lint:\n\tpython -m flake8\n")
+    (tmp_path / "package.json").write_text('{"scripts": {"lint": "eslint ."}}\n')
+    monkeypatch.setattr(
+        "conductor.shutil.which", _which_stub({"pre-commit", "make", "npm", "ruff"})
+    )
+    assert detect_lint_command(tmp_path) == ["pre-commit", "run", "--all-files"]
+
+
+def test_detect_lint_command_skips_pre_commit_when_binary_missing(tmp_path, monkeypatch):
+    (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
+    (tmp_path / "Makefile").write_text("lint:\n\tflake8\n")
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    assert detect_lint_command(tmp_path) == ["make", "lint"]
+
+
+def test_detect_lint_command_falls_through_to_npm_run_lint(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text('{"scripts": {"lint": "eslint ."}}\n')
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"npm"}))
+    assert detect_lint_command(tmp_path) == ["npm", "run", "lint"]
+
+
+def test_detect_lint_command_falls_through_to_ruff_for_python_repo(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    assert detect_lint_command(tmp_path) == ["ruff", "check", "."]
+
+
+def test_detect_lint_command_skips_ruff_when_no_python_signal(tmp_path, monkeypatch):
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    assert detect_lint_command(tmp_path) is None
+
+
+def test_default_lint_check_returns_none_when_no_tool_available(tmp_path, monkeypatch):
+    monkeypatch.setattr("conductor.shutil.which", _which_stub(set()))
+    assert default_lint_check(tmp_path) is None
+
+
+def test_default_lint_check_runs_detected_command_and_reports_failure(tmp_path, monkeypatch):
+    """Use a Makefile + real ``make`` (the test harness already depends on
+    Unix make presence for git, so this is portable). The lint target exits 1
+    with an identifiable diagnostic that we expect surfaced in the result.
+    """
+    if shutil.which("make") is None:
+        pytest.skip("make not available")
+    (tmp_path / "Makefile").write_text(
+        "lint:\n\t@echo 'fake lint failure: line too long'; exit 1\n"
+    )
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    diag = default_lint_check(tmp_path)
+    assert diag is not None
+    assert "make lint" in diag
+    assert "fake lint failure" in diag
+
+
+def test_default_lint_check_returns_none_on_passing_check(tmp_path, monkeypatch):
+    if shutil.which("make") is None:
+        pytest.skip("make not available")
+    (tmp_path / "Makefile").write_text("lint:\n\t@true\n")
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    assert default_lint_check(tmp_path) is None
+
+
+def test_run_preflight_invokes_default_lint_check_when_no_override(repo, monkeypatch):
+    """End-to-end: preflight without a stub uses default_lint_check, which
+    detects the seeded Makefile lint failure and hard-stops before any spawn.
+    """
+    if shutil.which("make") is None:
+        pytest.skip("make not available")
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    (repo / "Makefile").write_text(
+        "lint:\n\t@echo 'preflight diagnostic seeded'; exit 1\n"
+    )
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    spawner = StubSpawner(repo)
+    runner = StubTestRunner()
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "preflight_fail"
+    assert "preflight diagnostic seeded" in result.diagnostic
+    assert spawner.calls == []
+
+
+def test_phase_with_no_slot_falls_back_to_repo_default(repo):
+    """End-to-end: phase has no Test command, repo has pyproject pytest section.
+
+    The conductor must resolve to ``uvx pytest`` and call the test runner with
+    that command. We stub the runner to record the call, so the test does not
+    actually invoke pytest.
+    """
+    plan = _scratch_plan(repo, PLAN_NO_TEST_CMD)
+    (repo / "pyproject.toml").write_text("[tool.pytest.ini_options]\n")
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    assert runner.calls and runner.calls[0][0] == "uvx pytest"
