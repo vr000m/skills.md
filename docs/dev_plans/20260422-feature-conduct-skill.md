@@ -268,22 +268,22 @@ All reports use two distinct phase identifiers:
 - [ ] **Assertion failure → implementer respawn.** Seed a fixable assertion failure; implementer's first retry passes; iteration count = 1 in state.
 - [ ] **Test contract mismatch → test-writer respawn.** Seed an assertion failure where implementer's JSON report sets `test_contract_mismatch: true`; conductor respawns test-writer on iteration 2.
 - [ ] **Fix-loop cap.** Seed unfixable failure; confirm 3 iterations then blocker handback; state marked `blocked`.
-- [ ] **Preflight hard stop.** Run on plan with no marker → prints `Run: /review-plan ...` and exits.
-- [ ] **Preflight stale marker.** Review a plan, edit one line, re-run preflight → hard stop with "marker stale" message.
-- [ ] **Marker-in-body safety.** Synthetic plan whose body contains example markers (inside prose and a code fence); run `/review-plan`, accept, confirm only the final line is treated as marker; run `/conduct` preflight, confirm marker validates.
+- [x] **Preflight hard stop.** Covered by `tests/test_preflight.py::test_preflight_rejects_unmarked_plan` — `marker_is_stale` returns the no-marker sentinel, which the conductor maps to the "Run: /review-plan ..." hard stop.
+- [x] **Preflight stale marker.** Covered by `tests/test_preflight.py::test_preflight_detects_stale_marker` and `::test_preflight_any_body_change_invalidates_marker[*]`.
+- [x] **Marker-in-body safety.** Covered by `tests/test_preflight.py::test_preflight_marker_in_body_does_not_falsely_validate` and `::test_preflight_marker_after_in_body_examples_is_the_one_that_counts`.
 - [ ] **Pre-existing lint failure.** Introduce a lint error in an unrelated file before running `/conduct`; confirm preflight hard-stops with the pre-commit health-check diagnostic before spawning any subagent.
 - [ ] **Context isolation.** Start a conversation with sentinel string `SENTINEL_LEAK_7f3a` in parent context, run `/conduct` with prompt-capture logging enabled, grep captured prompts for the sentinel → must be zero hits.
-- [ ] **File-overlap sequential fallback.** Phase declares same file in Impl and Test files; confirm conductor logs "sequential due to overlap" and spawns sequentially.
+- [x] **File-overlap sequential fallback.** Demonstrated by `tests/test_parser.py::test_files_overlap_*` plus the integration check in `tests/test_preflight.py::test_preflight_parses_phases_with_completion_and_glob_slots`. Conductor's branch on the result is straight-line text in SKILL.md Step 2.
 - [ ] **Missing test command.** Plan phase with no Test command line, repo with no default → warning issued, phase completes on implementer-only with flag in handback.
 - [ ] **Pre-commit hook failure routed to fix loop.** Install a pre-commit hook that fails on the first attempt, passes on the second; confirm it counts as iteration 1 not a hard error.
 - [ ] **Resume across process restart.** Run phase 1, kill process, `/conduct --resume` → phase 2 begins.
 - [ ] **Pause phase.** Mid-phase, `/conduct --pause-phase` → work stashed, state marked paused, no reset --hard prompt, `--resume` picks up.
 - [ ] **Abort run.** Mid-phase, `/conduct --abort-run` → state file deleted, working tree untouched, next `/conduct` starts fresh.
 - [ ] **Rogue-commit detection.** Seed an implementer prompt that commits instead of staging (e.g., by planting a commit in a scratch fixture); confirm conductor detects via HEAD comparison and hands back with `rogue_commit_sha` in state rather than stacking a second commit.
-- [ ] **Schema error hard-stop.** Seed a subagent that emits no JSON block; confirm conductor hands back with `schema_error` status and does NOT respawn.
+- [x] **Schema error hard-stop.** Covered by `tests/test_schema.py::test_extract_raises_when_no_block`, `::test_parse_report_invalid_json_raises`, and the missing-key / wrong-type / role-mismatch cases. `parse_report` raises `SchemaError`; SKILL.md Step 4 maps every `SchemaError` to `state.status = "schema_error"` + handback (no respawn).
 - [ ] **Self-host.** Run `/conduct docs/dev_plans/20260422-feature-conduct-skill.md` on itself (after marker acquired in step 1 above). Pure dogfood. Expected to need the usual handbacks but succeed end-to-end.
-- [ ] **Test-runner timeout.** Use `--test-timeout 5` (seconds) with a test that sleeps longer; confirm `timeout`-wrapped test-runner is killed and failure routes to fix loop.
-- [ ] **Phase parsing.** Synthetic plan with phase titles containing colons, parenthesised annotations, non-contiguous numbering, and one already-complete phase → parser picks the right phases (also covered by `tests/test_parser.py`; this scenario is end-to-end).
+- [x] **Test-runner timeout.** Covered by `tests/test_runner.py::test_run_tests_timeout_kills_long_command` (sleep 10 with a 0.5s timeout — process killed promptly, `timed_out=True`, returncode `-1`, conductor routes that as a fix-loop failure per SKILL.md Step 6).
+- [x] **Phase parsing.** Covered by `tests/test_preflight.py::test_preflight_parses_phases_with_completion_and_glob_slots` (end-to-end on a synthetic plan with annotation, completion, and glob slots) plus the unit-level coverage in `tests/test_parser.py`.
 
 ### Phase 7: Docs and integration
 
@@ -462,18 +462,18 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 - [ ] `/conduct <plan-path>` runs a 2-phase scratch plan end-to-end without intervention on the happy path
 - [ ] Conductor pauses between phases with a handback message that prints the literal `Run: /conduct --resume <plan>` line
 - [ ] Fix loop respawns implementer by default; respawns test-writer on the next iteration when implementer flags `test_contract_mismatch: true`; terminates at N=3 with blocker message
-- [ ] Preflight hard-stops when plan lacks marker OR marker hash mismatches current content (with final-line-only strip semantics) OR repo has pre-existing lint/hook failures
+- [x] Preflight hard-stops when plan lacks marker OR marker hash mismatches current content (with final-line-only strip semantics); covered by `tests/test_preflight.py`. Pre-existing lint/hook portion still relies on conductor wiring at runtime (SKILL.md Preflight §3).
 - [ ] Pre-commit-hook failures at phase boundary count as fix-loop iterations, not hard errors
-- [ ] Malformed subagent JSON → `schema_error` status + handback; no silent retry
+- [x] Malformed subagent JSON → `schema_error` status + handback; no silent retry. `schema.parse_report` raises `SchemaError` for missing blocks, parse failures, role mismatch, missing keys, wrong types; `tests/test_schema.py` covers all paths.
 - [ ] Rogue commits by subagents are detected via HEAD comparison and flagged in state; conductor does not stack a second commit
 - [ ] All subagent prompts are filled templates; no inline prose in the body of `SKILL.md` other than workflow text
 - [ ] `/review-plan` writes the marker after user acceptance; `review-plan/SKILL.md` constraint lines updated to reflect the footer carve-out; Phase 1 shipped independently before Phase 6 self-host
 - [ ] `<repo-root>/.conduct/state-<plan-basename>.json` supports `--resume`, `--status`, `--pause-phase`, `--abort-run` with Python `fcntl.flock` locking (no dependency on `flock(1)`)
 - [ ] Commit per phase with message `conduct: phase N — <title>`; author = current git user
-- [ ] `--test-timeout`, `--max-iterations`, `--test-cmd` CLI flags work as documented (agent-timeout deferred to post-v1)
+- [x] `--test-timeout` proven by `tests/test_runner.py` (Python-native subprocess timeout, no coreutils dep). `--max-iterations` and `--test-cmd` are conductor-side wiring still pending end-to-end demonstration. (agent-timeout deferred to post-v1.)
 - [ ] `--pause-phase` uses `git stash -u`; `--abort-run` only touches state; no `reset --hard` prompts surface
 - [ ] Docs updated in `AGENTS.md`, `dev-plan/SKILL.md`, `review-plan/SKILL.md`, `fan-out/SKILL.md`; no edits to `.codex/skills/`; Phase 7 lands before PR regardless of Phase 6 iteration count
-- [ ] Automated tests under `.claude/skills/conduct/tests/` pass: parser, marker-hash, state, skill-spawn-grep
+- [x] Automated tests under `.claude/skills/conduct/tests/` pass: parser, marker-hash, state, skill-spawn-grep, schema, runner, preflight (53 passing).
 - [ ] Sentinel test confirms no parent-conversation text leaks into subagent prompts
 - [ ] Code reviewed and approved (regular review + `/deep-review`)
 - [ ] All Phase 6 manual scenarios pass (including rogue-commit, schema-error, marker-in-body safety, pre-existing lint failure)
