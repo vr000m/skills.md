@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -139,8 +140,43 @@ def _staged_diff(repo_root: Path) -> str:
     return _git(["diff", "--cached"], repo_root).stdout
 
 
+def _staged_paths(repo_root: Path) -> list[str]:
+    output = _git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"], repo_root).stdout
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _tracked_modified_paths(repo_root: Path) -> list[str]:
+    output = _git(["diff", "--name-only"], repo_root, check=False).stdout
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
 def _reset_index(repo_root: Path) -> None:
     _git(["reset"], repo_root)
+
+
+_REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"(?im)\b(authorization\s*:\s*bearer)\s+\S+"),
+        r"\1 [REDACTED]",
+    ),
+    (
+        re.compile(r"(?im)\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*\S+"),
+        r"\1=[REDACTED]",
+    ),
+)
+
+
+def _summarize_failure_output(output: str, *, max_chars: int = 1200, max_lines: int = 20) -> str:
+    redacted = output
+    for pattern, replacement in _REDACTION_PATTERNS:
+        redacted = pattern.sub(replacement, redacted)
+    lines = redacted.splitlines()
+    if len(lines) > max_lines:
+        redacted = "\n".join(["[...]", *lines[-max_lines:]])
+    redacted = redacted.strip()
+    if len(redacted) > max_chars:
+        redacted = "[...]\n" + redacted[-max_chars:]
+    return redacted or "(no output captured)"
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +346,26 @@ def _resolve_test_cmd(opts: ConductOptions, phase: Phase) -> Optional[str]:
     if phase.test_command:
         return phase.test_command
     return _repo_default_test_cmd(opts.repo_root)
+
+
+def _run_validation_if_present(
+    opts: ConductOptions, state: dict, phase: Phase, warnings: list[str]
+) -> Optional[ConductResult]:
+    if not phase.validation_command:
+        return None
+    validation = opts.test_runner(phase.validation_command, opts.test_timeout)
+    if validation.returncode != 0 or validation.timed_out:
+        state["status"] = "awaiting_user"
+        state["blocker"] = f"Phase {phase.label} validation failed"
+        _persist_state(opts, state)
+        return ConductResult(
+            status="awaiting_user",
+            state=state,
+            summary=state["blocker"],
+            diagnostic=validation.output[-2000:],
+        )
+    warnings.append("validation passed")
+    return None
 
 
 def detect_lint_command(repo_root: Path) -> Optional[list[str]]:
@@ -587,6 +643,9 @@ def _run_phase(
         warnings: list[str] = list(initial_warnings or [])
         if test_cmd is None:
             warnings.append("no test command; skipped tests")
+            validation_result = _run_validation_if_present(opts, state, phase, warnings)
+            if validation_result is not None:
+                return validation_result
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
             if commit_outcome.status != "running":
                 return commit_outcome
@@ -595,19 +654,9 @@ def _run_phase(
         # Step 5: run tests.
         result = opts.test_runner(test_cmd, opts.test_timeout)
         if result.returncode == 0 and not result.timed_out:
-            if phase.validation_command:
-                validation = opts.test_runner(phase.validation_command, opts.test_timeout)
-                if validation.returncode != 0 or validation.timed_out:
-                    state["status"] = "awaiting_user"
-                    state["blocker"] = f"Phase {phase.label} validation failed"
-                    _persist_state(opts, state)
-                    return ConductResult(
-                        status="awaiting_user",
-                        state=state,
-                        summary=state["blocker"],
-                        diagnostic=validation.output[-2000:],
-                    )
-                warnings.append("validation passed")
+            validation_result = _run_validation_if_present(opts, state, phase, warnings)
+            if validation_result is not None:
+                return validation_result
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
             if commit_outcome.status != "running":
                 return commit_outcome
@@ -631,13 +680,13 @@ def _run_phase(
 
         # Capture staged diff, reset index, then choose respawn role.
         prior_diff = _staged_diff(opts.repo_root)
-        _reset_index(opts.repo_root)
-        test_failures = result.output
-
         flag_mismatch = bool(
             impl_report
             and impl_report.get("flags", {}).get("test_contract_mismatch") is True
         )
+        if not flag_mismatch:
+            _reset_index(opts.repo_root)
+        test_failures = _summarize_failure_output(result.output)
         respawn_role = "test-writer" if flag_mismatch else "implementer"
         iteration = state["iteration_count"]
 
@@ -704,13 +753,34 @@ def _commit_phase(
         return ConductResult(status="running", state=state, summary="")
 
     commit_msg = f"conduct: phase {phase.label} — {phase.title}"
+    staged_paths = _staged_paths(opts.repo_root)
     proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
     if proc.returncode != 0:
-        unstaged = _git(["diff", "--name-only"], opts.repo_root, check=False).stdout.strip()
-        if unstaged:
-            warnings.append("pre-commit hook modified files; re-staged and retrying")
-            _git(["add", "-u"], opts.repo_root, check=False)
-            proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
+        modified_paths = _tracked_modified_paths(opts.repo_root)
+        if modified_paths:
+            if staged_paths and set(modified_paths).issubset(set(staged_paths)):
+                warnings.append("pre-commit hook modified files; re-staged and retrying")
+                _git(["add", "-u", "--", *staged_paths], opts.repo_root, check=False)
+                proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
+            else:
+                state["status"] = "awaiting_user"
+                state["blocker"] = (
+                    f"Phase {phase.label} pre-commit modified files outside the staged set"
+                )
+                state["last_summary"] = state["blocker"]
+                _persist_state(opts, state)
+                return ConductResult(
+                    status="awaiting_user",
+                    state=state,
+                    summary=state["blocker"],
+                    next_command=f"Run: /conduct --resume {opts.plan_path}",
+                    diagnostic=(
+                        "Modified tracked files after failed commit:\n"
+                        + "\n".join(modified_paths)
+                        + "\n\nOriginally staged files:\n"
+                        + "\n".join(staged_paths or ["<none>"])
+                    )[-2000:],
+                )
     if proc.returncode != 0:
         # Pre-commit hook failure → route into fix loop.
         state["iteration_count"] += 1
@@ -872,6 +942,7 @@ def _retry_after_hook_failure(
     iteration = state["iteration_count"]
     prior_diff = _staged_diff(opts.repo_root)
     _reset_index(opts.repo_root)
+    failure_context = _summarize_failure_output(hook_output)
 
     respawn_role = "implementer"
     while True:
@@ -885,7 +956,7 @@ def _retry_after_hook_failure(
             iteration=iteration,
             base_sha=base_sha,
             prior_diff=prior_diff,
-            test_failures=hook_output,
+            test_failures=failure_context,
         )
         text = opts.spawn(req)
         try:
@@ -906,10 +977,9 @@ def _retry_after_hook_failure(
             return block_result
         # SKILL.md Step 6: if implementer flagged test_contract_mismatch, the
         # next iteration respawns the test-writer instead.
+        next_respawn_role = "implementer"
         if respawn_role == "implementer" and report.get("flags", {}).get("test_contract_mismatch"):
-            respawn_role = "test-writer"
-        else:
-            respawn_role = "implementer"
+            next_respawn_role = "test-writer"
 
         # Tests
         test_cmd = _resolve_test_cmd(opts, phase)
@@ -926,23 +996,16 @@ def _retry_after_hook_failure(
                     _persist_state(opts, state)
                     return ConductResult(status="blocked", state=state, summary=state["blocker"])
                 prior_diff = _staged_diff(opts.repo_root)
-                _reset_index(opts.repo_root)
-                hook_output = result.output
+                if next_respawn_role != "test-writer":
+                    _reset_index(opts.repo_root)
+                failure_context = _summarize_failure_output(result.output)
                 iteration = state["iteration_count"]
+                respawn_role = next_respawn_role
                 continue
-        if phase.validation_command:
-            validation = opts.test_runner(phase.validation_command, opts.test_timeout)
-            if validation.returncode != 0 or validation.timed_out:
-                state["status"] = "awaiting_user"
-                state["blocker"] = f"Phase {phase.label} validation failed"
-                _persist_state(opts, state)
-                return ConductResult(
-                    status="awaiting_user",
-                    state=state,
-                    summary=state["blocker"],
-                    diagnostic=validation.output[-2000:],
-                )
-            validation_passed = True
+        validation_result = _run_validation_if_present(opts, state, phase, [])
+        if validation_result is not None:
+            return validation_result
+        validation_passed = bool(phase.validation_command)
 
         warnings: list[str] = list(initial_warnings or [])
         if validation_passed:
@@ -952,8 +1015,9 @@ def _retry_after_hook_failure(
         except _CommitHookFailure as exc:
             prior_diff = _staged_diff(opts.repo_root)
             _reset_index(opts.repo_root)
-            hook_output = exc.output
+            failure_context = _summarize_failure_output(exc.output)
             iteration = state["iteration_count"]
+            respawn_role = "implementer"
             continue
         if commit_outcome.status != "running":
             return commit_outcome

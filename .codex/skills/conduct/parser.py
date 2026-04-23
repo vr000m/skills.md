@@ -115,7 +115,12 @@ def _parse_file_list(body_lines: list[str], pattern: re.Pattern[str]) -> list[st
             raw = match.group(1).strip()
             if raw.lower() in {"none", "n/a", "-"}:
                 return []
-            return [item.strip() for item in raw.split(",") if item.strip()]
+            items = []
+            for item in raw.split(","):
+                normalized = item.strip().strip("`").strip()
+                if normalized:
+                    items.append(normalized)
+            return items
     return None
 
 

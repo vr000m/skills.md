@@ -132,6 +132,25 @@ def test_parse_phases_multiple_test_commands_picks_first():
     assert phases[0].test_command == "first"
 
 
+def test_parse_file_slots_strip_optional_backticks():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: Backticked slots
+
+        **Impl files:** `src/a.py, src/b.py`
+        **Test files:** `tests/test_a.py`
+        **Test command:** `pytest -q`
+
+        - [ ] x
+        """
+    )
+    phases = parse_phases(plan)
+    assert phases[0].impl_files == ["src/a.py", "src/b.py"]
+    assert phases[0].test_files == ["tests/test_a.py"]
+
+
 def test_parse_phases_no_checklist_header_returns_empty():
     plan = "# No checklist here\n"
     assert parse_phases(plan) == []

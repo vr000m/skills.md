@@ -148,6 +148,19 @@ PLAN_WITH_VALIDATION = """\
 - [ ] do it
 """
 
+PLAN_VALIDATION_ONLY = """\
+# Scratch
+## Implementation Checklist
+
+### Phase 1: Validate without tests
+
+**Impl files:** src/a.py
+**Test files:** tests/test_a.py
+**Validation cmd:** `python scripts/validate.py`
+
+- [ ] do it
+"""
+
 PLAN_NO_SLOTS = """\
 # Scratch
 ## Implementation Checklist
@@ -407,6 +420,32 @@ def test_assertion_failure_respawns_implementer_and_passes_on_iteration_1(repo):
     assert [c.iteration for c in impl_calls] == [0, 1]
 
 
+def test_failure_summaries_are_redacted_before_respawn(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+
+    def first_attempt(req, r):
+        _stage(r, "src/a.py", "buggy=1\n")
+        return _impl_report(0, ["src/a.py"])
+
+    def second_attempt(req, r):
+        assert "AssertionError" in req.test_failures
+        assert "token=[REDACTED]" in req.test_failures
+        assert "token=abc123" not in req.test_failures
+        _stage(r, "src/a.py", "fixed=1\n")
+        return _impl_report(1, ["src/a.py"])
+
+    spawner.script("implementer", 0, first_attempt)
+    spawner.script("implementer", 1, second_attempt)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_failing("AssertionError token=abc123"), _passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+
+
 def test_blocked_implementer_report_stops_before_tests_or_commit(repo):
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
     spawner = StubSpawner(repo)
@@ -507,6 +546,43 @@ def test_test_contract_mismatch_routes_iteration_1_to_test_writer(repo):
     assert iter1[0].role == "test-writer"
 
 
+def test_test_writer_retry_preserves_prior_implementation_changes(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+
+    def impl_first(req, r):
+        _stage(r, "src/a.py", "impl=1\n")
+        return _impl_report(0, ["src/a.py"], test_contract_mismatch=True, explanation="tests wrong")
+
+    def test_writer_second(req, r):
+        assert "impl=1" in req.prior_diff
+        _stage(r, "tests/test_a.py", "def test_a(): assert True\n")
+        payload = {
+            "role": "test-writer",
+            "phase_position": 0,
+            "phase_label": "1",
+            "iteration": 1,
+            "test_files_added": ["tests/test_a.py"],
+            "test_commands": ["true"],
+            "coverage_summary": "fixed",
+            "flags": {"blocked": False, "needs_impl_clarification": None},
+        }
+        return f"```json\n{json.dumps(payload)}\n```"
+
+    spawner.script("implementer", 0, impl_first)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    spawner.script("test-writer", 1, test_writer_second)
+    runner = StubTestRunner(queue=[_failing(), _passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    show = _git(["show", "--stat", "--name-only", "--format=%B", "HEAD"], repo).stdout
+    assert "src/a.py" in show
+    assert "tests/test_a.py" in show
+
+
 def test_fix_loop_cap_blocks_after_three_iterations(repo):
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
     spawner = StubSpawner(repo)
@@ -578,6 +654,46 @@ def test_missing_test_command_warns_and_completes_phase(repo):
     assert runner.calls == []
     log = _git(["log", "--oneline"], repo).stdout
     assert "phase 1" in log
+
+
+def test_validation_runs_even_when_no_test_command_is_declared(repo):
+    plan = _scratch_plan(repo, PLAN_VALIDATION_ONLY)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    assert "no test command" in result.summary
+    assert "validation passed" in result.summary
+    assert runner.calls == [("python scripts/validate.py", 300.0)]
+
+
+def test_validation_failure_without_test_command_hands_back_before_commit(repo):
+    plan = _scratch_plan(repo, PLAN_VALIDATION_ONLY)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_failing("validation failed")])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    assert result.summary == "Phase 1 validation failed"
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "conduct: phase 1" not in log
 
 
 def test_precommit_hook_failure_routes_to_fix_loop(repo):
@@ -670,6 +786,52 @@ def test_precommit_hook_restage_retry_succeeds_without_respawn(repo):
     assert "pre-commit hook modified files; re-staged and retrying" in result.summary
     assert len([c for c in spawner.calls if c.role == "implementer" and c.iteration > 0]) == 0
     assert "# hook formatted" in (repo / "src" / "a.py").read_text()
+
+
+def test_precommit_hook_does_not_stage_unrelated_tracked_edits(repo):
+    _stage(repo, "docs/unrelated.md", "seed\n")
+    _git(["commit", "-q", "-m", "seed unrelated"], repo)
+    (repo / "docs" / "unrelated.md").write_text("dirty tracked edit\n")
+
+    hooks_dir = repo / ".git" / "hooks"
+    counter = repo / ".hook-counter"
+    counter.write_text("0\n")
+    hook = hooks_dir / "pre-commit"
+    hook.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/bin/sh
+            n=$(cat {counter})
+            echo $((n+1)) > {counter}
+            if [ "$n" = "0" ]; then
+              printf '# hook formatted\\n' >> src/a.py
+              echo "formatter changed files" >&2
+              exit 1
+            fi
+            exit 0
+            """
+        )
+    )
+    hook.chmod(0o755)
+
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    assert "outside the staged set" in result.summary
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "conduct: phase 1" not in log
+    assert (repo / "docs" / "unrelated.md").read_text() == "dirty tracked edit\n"
 
 
 def test_pause_phase_stashes_and_marks_state(repo):

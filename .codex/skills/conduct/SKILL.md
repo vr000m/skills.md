@@ -153,7 +153,7 @@ Read `implementer-prompt.md`, extract the fenced ` ``` ` Template block, substit
 | `{{ITERATION}}` | current fix-loop iteration | substitute bare int (no quotes) |
 | `{{BASE_SHA}}` | `git rev-parse HEAD` at phase start | string |
 | `{{PRIOR_DIFF}}` | staged diff from previous attempt, else empty | string |
-| `{{TEST_FAILURES}}` | test-runner or pre-commit hook output, else empty | string |
+| `{{TEST_FAILURES}}` | redacted failure summary from the test runner or pre-commit hook, else empty | string |
 
 Same pattern for `test-writer-prompt.md` (placeholders: plan path, phase index, phase label, phase title, base sha, existing-tests summary) and `reviewer-prompt.md` (plan path, phase index, phase label, phase title, diff).
 
@@ -175,7 +175,7 @@ Resolve the test command in order:
 1. `--test-cmd` CLI flag.
 2. Phase's `**Test command:**` line.
 3. Repo default: `package.json` `scripts.test`, `pyproject.toml` `[tool.pytest.ini_options]`, or `Makefile` `test` target.
-4. None available → emit warning, skip tests, set `state.last_summary` with the skip flag, proceed directly to Step 8 (commit boundary).
+4. None available → emit warning, skip tests, still run Step 5b if a `Validation cmd:` is present, then proceed to Step 8 (commit boundary).
 
 Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The runner starts the test command in its own subprocess session and, on timeout, terminates the full process group so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
 
@@ -183,7 +183,7 @@ On non-zero exit → Step 6. On zero exit → Step 5b (if a validation command i
 
 ### Step 5b — Optional validation command
 
-If the phase declares a `**Validation cmd:**` slot, run it via the same `runner.run_tests` subprocess wrapper after tests pass. Semantics differ from Step 5 in two ways:
+If the phase declares a `**Validation cmd:**` slot, run it via the same `runner.run_tests` subprocess wrapper after tests pass. If Step 5 skipped tests because no test command was available, still run validation before the boundary commit. Semantics differ from Step 5 in two ways:
 
 1. **No fix loop on failure.** A non-zero exit or timeout sets `state.status = "awaiting_user"` with `state.blocker = "Phase <label> validation failed"`, persists the blocker state, and hands back with the last 2000 bytes of validation output as the diagnostic. Validation failures do not append a completed-phase entry and do not create a third `commit_sha: null` state branch.
 2. **Same trust boundary as Test command.** The plan author chose this shell command. Review it with the same care as `Test command:` before you run `/conduct`.
@@ -196,9 +196,9 @@ No classifier. On any failure (test failure OR pre-commit hook failure at the bo
 
 - Increment `state.iteration_count`. Persist state immediately (crash recovery).
 - If `iteration_count > N`: set `state.status = "blocked"`, handback with message `Phase <label> stalled after <N> iterations; see .conduct/state-<plan-id>.json for diff and failure history.` Do not auto-advance.
-- Else **reset the index before respawn**: capture `git diff --cached` into `{{PRIOR_DIFF}}`, then run `git reset` (mixed, no `--hard`) to clear the staging area. The respawned implementer starts from a clean index with the prior diff visible only inside its prompt — this prevents stale staged content from a failed attempt silently mixing into the next iteration.
-- Respawn the implementer with `{{ITERATION}}` = new count, `{{PRIOR_DIFF}}` = the captured diff, `{{TEST_FAILURES}}` = full runner output (or hook output, if the failure came from the boundary commit).
-- Exception: if the previous implementer report set `flags.test_contract_mismatch: true`, respawn the **test-writer** instead on this iteration, same inputs. Reset the flag handling for the iteration after that (respawn implementer again unless the next report flips the flag again).
+- Else capture `git diff --cached` into `{{PRIOR_DIFF}}`. Normally then run `git reset` (mixed, no `--hard`) to clear the staging area so the respawned implementer starts from a clean index with the prior diff visible only inside its prompt.
+- Respawn the implementer with `{{ITERATION}}` = new count, `{{PRIOR_DIFF}}` = the captured diff, `{{TEST_FAILURES}}` = a redacted failure summary (or pre-commit hook summary, if the failure came from the boundary commit).
+- Exception: if the previous implementer report set `flags.test_contract_mismatch: true`, respawn the **test-writer** instead on this iteration and keep the previously staged implementation diff in the index so the follow-up commit can still include the original implementation work plus the newly staged tests. Reset the flag handling for the iteration after that (respawn implementer again unless the next report flips the flag again).
 
 ### Step 7 — Optional mid-phase reviewer (one-shot)
 
@@ -210,7 +210,7 @@ After tests pass (or were skipped with warning):
 
 1. **Rogue-commit check.** Compare `git rev-parse HEAD` to the phase-start baseline: `state.resume_base_sha` if this run started from `--resume`, otherwise `state.base_sha` (for phase 1) or the last completed phase's `commit_sha`. If HEAD advanced beyond the baseline _during this phase's subagent work_, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase summary, set `state.status = "awaiting_user"` with a warning, handback. (User commits made during a previous handback are absorbed into `resume_base_sha` at preflight, so they do not trip this check.)
 2. Otherwise run `git commit -m "conduct: phase <label> — <phase title>"`. Commit author = current git user (no impersonation).
-3. If the pre-commit hook fails, first check whether the hook modified files in-place (formatters like black, ruff --fix, prettier). If `git diff --name-only` is non-empty at this point, run `git add -u` and retry the commit **once** in-place with the same message. If the retry succeeds, append the warning `pre-commit hook modified files; re-staged and retrying` to the phase warnings and continue at step 4 as a normal success. If the retry also fails, or if the hook did not modify files, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
+3. If the pre-commit hook fails, first check whether the hook modified files in-place (formatters like black, ruff --fix, prettier). Only auto-restage when every modified tracked file is already in the original staged pathset for this phase; in that case, run `git add -u -- <staged-paths...>` and retry the commit **once** in-place with the same message. If the retry succeeds, append the warning `pre-commit hook modified files; re-staged and retrying` to the phase warnings and continue at step 4 as a normal success. If the hook modified tracked files outside the original staged pathset, hand back to the user instead of auto-staging unrelated edits. If the retry fails, or if the hook did not modify files, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
 4. On success, record the new `HEAD` SHA in `state.completed_phases[*].commit_sha`.
 
 ### Step 9 — Handback
