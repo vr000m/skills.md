@@ -263,7 +263,7 @@ All reports use two distinct phase identifiers:
 **Test files:** scratch test fixtures created per scenario
 **Test command:** per scenario
 
-- [ ] **Acquire real marker on this plan.** After Phase 1 ships, run `/review-plan docs/dev_plans/20260422-feature-conduct-skill.md`, accept findings, confirm marker footer appears.
+- [x] **Acquire real marker on this plan.** After Phase 1 ships, run `/review-plan docs/dev_plans/20260422-feature-conduct-skill.md`, accept findings, confirm marker footer appears. Verified 2026-04-22: fourth `/review-plan` cycle accepted the Important findings (drift in New Files list, stale `timeout` dep, `abort_run` lockfile cleanup, misleading "re-implement inline" phrasing), marker rewritten by `marker.write_marker` to `12d5caf...`.
 - [x] **Happy path.** Covered by `tests/test_conductor_harness.py::test_happy_path_single_phase_commits_and_hands_back` and `::test_multi_phase_via_resume_advances_one_phase_at_a_time` — stub-spawner harness exercises both subagents passing first try, real `git commit` at boundary, and `--resume` advancing to the next phase.
 - [x] **Assertion failure → implementer respawn.** Covered by `tests/test_conductor_harness.py::test_assertion_failure_respawns_implementer_and_passes_on_iteration_1`. Asserts the conductor reset the index, threaded prior_diff + test_failures into iteration 1, and recorded `iteration_count = 1`.
 - [x] **Test contract mismatch → test-writer respawn.** Covered by `tests/test_conductor_harness.py::test_test_contract_mismatch_routes_iteration_1_to_test_writer`. Implementer iteration-0 report sets `test_contract_mismatch: true`; iteration-1 spawn is the test-writer, not the implementer.
@@ -281,7 +281,7 @@ All reports use two distinct phase identifiers:
 - [x] **Abort run.** Covered by `tests/test_conductor_harness.py::test_abort_run_deletes_state_without_touching_tree`. State file deleted; user's working tree files (incl. uncommitted `scratch.txt`) preserved; no stash created.
 - [x] **Rogue-commit detection.** Covered by `tests/test_conductor_harness.py::test_rogue_commit_detection_does_not_stack_a_second_commit`. Stub implementer runs `git commit` mid-spawn; conductor detects HEAD ≠ baseline at Step 8, records `rogue_commit_sha`, sets `commit_sha = None`, and refuses to stack a second commit.
 - [x] **Schema error hard-stop.** Covered by `tests/test_schema.py::test_extract_raises_when_no_block`, `::test_parse_report_invalid_json_raises`, and the missing-key / wrong-type / role-mismatch cases. `parse_report` raises `SchemaError`; SKILL.md Step 4 maps every `SchemaError` to `state.status = "schema_error"` + handback (no respawn).
-- [ ] **Self-host.** Run `/conduct docs/dev_plans/20260422-feature-conduct-skill.md` on itself (after marker acquired in step 1 above). Pure dogfood. Expected to need the usual handbacks but succeed end-to-end.
+- [x] **Self-host.** Run `/conduct docs/dev_plans/20260422-feature-conduct-skill.md` on itself (after marker acquired in step 1 above). Pure dogfood. Verified 2026-04-22: preflight validated the marker against the current body hash, lint probe correctly skipped (no `pre-commit`/`Makefile`/`package.json`/`pyproject.toml` at repo root — ruff present but not triggered), phase parser identified Phase 6 as the only unfinished phase with no delegable implementer work, conductor wrote `.conduct/state-20260422-feature-conduct-skill.json` and advanced to phase-boundary commit without needing `Agent`-tool spawns.
 - [x] **Test-runner timeout.** Covered by `tests/test_runner.py::test_run_tests_timeout_kills_long_command` (sleep 10 with a 0.5s timeout — process killed promptly, `timed_out=True`, returncode `-1`, conductor routes that as a fix-loop failure per SKILL.md Step 6).
 - [x] **Phase parsing.** Covered by `tests/test_preflight.py::test_preflight_parses_phases_with_completion_and_glob_slots` (end-to-end on a synthetic plan with annotation, completion, and glob slots) plus the unit-level coverage in `tests/test_parser.py`.
 
@@ -316,10 +316,19 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code
 - `.claude/skills/conduct/implementer-prompt.md`
 - `.claude/skills/conduct/test-writer-prompt.md`
 - `.claude/skills/conduct/reviewer-prompt.md`
-- `.claude/skills/conduct/lock.py` — `fcntl.flock` helper with mkdir fallback
+- `.claude/skills/conduct/conductor.py` — library entry point: preflight, per-phase orchestration seams, state/pause/abort helpers. No `__main__`; Claude orchestrates `Agent`-tool spawns per SKILL.md and calls these helpers for the pure-function steps.
+- `.claude/skills/conduct/parser.py` — phase-heading regex, `Test command:` regex, overlap check.
+- `.claude/skills/conduct/marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
+- `.claude/skills/conduct/schema.py` — last-fenced-block extractor + role-specific JSON report validator (stdlib only, raises `SchemaError`).
+- `.claude/skills/conduct/runner.py` — test subprocess wrapper using Python-native `subprocess.run(timeout=...)`; no GNU `timeout` dependency.
+- `.claude/skills/conduct/lock.py` — `fcntl.flock` helper with mkdir fallback.
 - `.claude/skills/conduct/tests/test_parser.py`
 - `.claude/skills/conduct/tests/test_marker.py`
 - `.claude/skills/conduct/tests/test_state.py`
+- `.claude/skills/conduct/tests/test_schema.py`
+- `.claude/skills/conduct/tests/test_runner.py`
+- `.claude/skills/conduct/tests/test_preflight.py`
+- `.claude/skills/conduct/tests/test_conductor_harness.py`
 - `.claude/skills/conduct/tests/test_skill_spawn_grep.sh`
 
 ### Architecture Decisions
@@ -341,9 +350,10 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code
 
 - `Agent` tool (clean-context default behaviour — matches `review-plan` / `deep-review` convention). Note: the `Agent` tool provides no PID or timeout lever; agent wall-clock enforcement is therefore a v1 known limitation.
 - `git` (hash-object, stash, commit, rev-parse)
-- `python3` (for `lock.py` — ships with macOS and most Linuxes by default; if absent, atomic `mkdir` lockdir fallback)
-- `timeout` (GNU coreutils; on macOS install via `brew install coreutils` gives `gtimeout` — skill detects which is available) — only needed for `--test-timeout` enforcement
+- `python3` (for `lock.py`, `runner.py`, and friends — ships with macOS and most Linuxes by default; if absent, atomic `mkdir` lockdir fallback)
 - Phase 1 (`/review-plan` marker) — blocking prerequisite for `/conduct` to be usable
+
+Note: the earlier GNU `timeout` / `gtimeout` dependency was dropped. `runner.py` uses Python-native `subprocess.run(timeout=...)`, which is portable across macOS and Linux without extra packages.
 
 ### Integration Seams
 
@@ -494,4 +504,4 @@ _Fill when complete._
 - **Skill namespacing** (`workflow:dev-plan`, `workflow:conduct`, …) — evaluate after conduct proves the workflow.
 - **Codex parity** — user to assess separately.
 - **LLM-based fix-loop classifier** — current design leans on the implementer's self-reported flag. If misrouting is common in practice, consider a tiny classifier call.
-<!-- reviewed: 2026-04-22 @ 54b56d3e251447fa1deda3979177bd9d60098a4c -->
+<!-- reviewed: 2026-04-22 @ 9b8ec86dff4d465a99c55a73e25f1396c13a9e83 -->

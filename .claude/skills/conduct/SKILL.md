@@ -22,7 +22,9 @@ Helper modules for preflight and state handling:
 - `schema.py` — last-fenced-block extraction + role-specific report validation (raises `SchemaError`). Stdlib only.
 - `runner.py` — test-command subprocess wrapper with portable wall-clock timeout via `subprocess.run(timeout=...)`. Returns `TestResult(returncode, output, timed_out, duration_seconds)`.
 
-Deterministic tests for all three under `tests/` (run via `uvx pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`). Main Claude can call these helpers from Bash or re-implement the algorithm inline — both are documented.
+Deterministic tests under `tests/` (run via `uvx pytest .claude/skills/conduct/tests/ -v && bash .claude/skills/conduct/tests/test_skill_spawn_grep.sh`).
+
+These helpers are a pure-Python library — there is no CLI entry point. Main Claude orchestrates the per-phase loop turn-by-turn per this SKILL.md: it calls helpers (preflight, phase parse, state read/write, pause/abort) via `python3 -c ...` in Bash for the pure-function steps, and invokes the `Agent` tool directly for each subagent spawn. The `Agent` spawn loop cannot be driven from Bash because the tool is synchronous within the parent turn.
 
 ## Delegation Pattern
 
@@ -47,7 +49,7 @@ conduct --abort-run <plan-path>
 | `--resume` | Resume after a handback. Reads state, picks up at the next unfinished phase. |
 | `--status` | Print the state file contents and exit. No git ops. |
 | `--pause-phase` | `git stash push -u -m "conduct-pause-phase-<N>"`, mark phase as user-paused, exit. State lives; `--resume` picks up. |
-| `--abort-run` | Delete the state file. No git ops, no stash. The more-destructive flag has the more-explicit name. |
+| `--abort-run` | Delete the state file and any stale lockfile/lockdir for this plan. No git ops, no stash. The more-destructive flag has the more-explicit name. |
 | `--test-cmd CMD` | Override the phase's `Test command:` slot and any repo default. |
 | `--test-timeout SECS` | Wall-clock cap on the test-runner subprocess. Default 300. |
 | `--max-iterations N` | Fix-loop cap. Default 3. |

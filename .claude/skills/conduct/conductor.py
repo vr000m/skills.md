@@ -746,8 +746,17 @@ def pause_phase(opts: ConductOptions) -> ConductResult:
 
 
 def abort_run(opts: ConductOptions) -> ConductResult:
-    """`--abort-run`: delete state. No git ops, no stash."""
+    """`--abort-run`: delete state plus any stale lockfile/lockdir. No git ops, no stash."""
     sp = _state_path(opts)
     if sp.exists():
         sp.unlink()
+    lockfile = sp.with_suffix(sp.suffix + ".lock")
+    if lockfile.exists():
+        lockfile.unlink()
+    lockdir = sp.with_suffix(sp.suffix + ".lock.lockdir")
+    if lockdir.exists():
+        pid_file = lockdir / "pid"
+        if pid_file.exists():
+            pid_file.unlink()
+        lockdir.rmdir()
     return ConductResult(status="aborted", state={}, summary="state deleted")
