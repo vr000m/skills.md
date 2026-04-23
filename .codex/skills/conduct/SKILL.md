@@ -16,7 +16,7 @@ Subagent prompt templates live alongside this file:
 
 Helper modules for preflight and state handling:
 
-- `parser.py` — phase-heading regex, `Test command:` regex, phase-overlap check.
+- `parser.py` — phase-heading regex, `Test command:` / `Validation cmd:` regexes, phase-overlap check.
 - `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
 - `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
 - `schema.py` — last-fenced-block extraction + role-specific report validation (raises `SchemaError`). Stdlib only.
@@ -113,6 +113,8 @@ Parse phases from the `## Implementation Checklist` section with regex:
 
 Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthesised annotations. Skip phases whose task checkboxes are all `- [x]`. Record each phase's 0-based document position (used as `phase_position` in reports) and verbatim label (used as `phase_label`).
 
+If every unfinished phase omits every contract slot (`Impl files:`, `Test files:`, `Test command:`, `Validation cmd:`), continue in degraded mode but queue a one-shot warning for the first handback: the user should see that they lost parallel spawn and explicit test/validation wiring.
+
 ## Per-Phase Workflow
 
 For each unfinished phase, execute steps 1–9. Acquire the state-file lock before any state mutation.
@@ -126,6 +128,7 @@ From the phase block, extract:
 - `**Impl files:**` — comma-separated paths, globs allowed.
 - `**Test files:**` — comma-separated paths, globs allowed.
 - `` **Test command:** `<cmd>` `` — parsed with `^\*\*Test command:\*\*\s+\x60([^\x60]+)\x60\s*$`; first match wins; additional matches emit a warning.
+- `` **Validation cmd:** `<cmd>` `` — optional, parsed with `^\*\*Validation cmd:\*\*\s+\x60([^\x60]+)\x60\s*$`; first match wins; additional matches emit a warning.
 
 Any slot may be absent; see Fallbacks below.
 
@@ -176,7 +179,16 @@ Resolve the test command in order:
 
 Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The runner starts the test command in its own subprocess session and, on timeout, terminates the full process group so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
 
-On non-zero exit → Step 6. On zero exit → Step 7.
+On non-zero exit → Step 6. On zero exit → Step 5b (if a validation command is present), else Step 7.
+
+### Step 5b — Optional validation command
+
+If the phase declares a `**Validation cmd:**` slot, run it via the same `runner.run_tests` subprocess wrapper after tests pass. Semantics differ from Step 5 in two ways:
+
+1. **No fix loop on failure.** A non-zero exit or timeout sets `state.status = "awaiting_user"` with `state.blocker = "Phase <label> validation failed"`, persists the blocker state, and hands back with the last 2000 bytes of validation output as the diagnostic. Validation failures do not append a completed-phase entry and do not create a third `commit_sha: null` state branch.
+2. **Same trust boundary as Test command.** The plan author chose this shell command. Review it with the same care as `Test command:` before you run `/conduct`.
+
+On zero exit, append `"validation passed"` to the phase warnings and continue to Step 7.
 
 ### Step 6 — Fix loop (bounded at N = `--max-iterations`, default 3)
 
@@ -198,7 +210,7 @@ After tests pass (or were skipped with warning):
 
 1. **Rogue-commit check.** Compare `git rev-parse HEAD` to the phase-start baseline: `state.resume_base_sha` if this run started from `--resume`, otherwise `state.base_sha` (for phase 1) or the last completed phase's `commit_sha`. If HEAD advanced beyond the baseline _during this phase's subagent work_, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase summary, set `state.status = "awaiting_user"` with a warning, handback. (User commits made during a previous handback are absorbed into `resume_base_sha` at preflight, so they do not trip this check.)
 2. Otherwise run `git commit -m "conduct: phase <label> — <phase title>"`. Commit author = current git user (no impersonation).
-3. If the pre-commit hook fails, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
+3. If the pre-commit hook fails, first check whether the hook modified files in-place (formatters like black, ruff --fix, prettier). If `git diff --name-only` is non-empty at this point, run `git add -u` and retry the commit **once** in-place with the same message. If the retry succeeds, append the warning `pre-commit hook modified files; re-staged and retrying` to the phase warnings and continue at step 4 as a normal success. If the retry also fails, or if the hook did not modify files, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
 4. On success, record the new `HEAD` SHA in `state.completed_phases[*].commit_sha`.
 
 ### Step 9 — Handback
@@ -225,6 +237,7 @@ No keyword heuristic watches for "proceed" — the user copies the printed comma
 
 - Missing `Impl files:` / `Test files:` → sequential spawn (Step 2).
 - Missing `Test command:`, no repo default, no `--test-cmd` → warn, skip tests for the phase, flag in handback summary (Step 5).
+- Missing every contract slot across every unfinished phase → continue, but emit the degraded-mode warning on the first handback (phase parsing + Step 9).
 - Missing Testing Notes entirely → same as above; phase completes on implementer-only success with the skip flag.
 - Delegated subagents unavailable → hard-stop with the explicit delegation-unavailable message above. Do not inline the phase in the main session.
 - Plan has zero unfinished phases → print `All phases complete` and exit.
@@ -263,11 +276,11 @@ Schema:
 
 ## Trust Boundary
 
-**The plan's `Test command:` slot is executed as a shell command** (via `runner.run_tests` with `shell=True`). Running `/conduct` on a plan is therefore equivalent in trust to running `make test`, `npm test`, or `cargo test` on a branch you checked out — the plan author chooses what gets executed.
+**The plan's `Test command:` and `Validation cmd:` slots are executed as shell commands** (via `runner.run_tests` with `shell=True`). Running `/conduct` on a plan is therefore equivalent in trust to running `make test`, `npm test`, or `cargo test` on a branch you checked out — the plan author chooses what gets executed.
 
 Treat a dev plan received from someone else (a teammate's branch, an external PR, a forwarded file) the same way you'd treat a `Makefile` or `package.json` from that source: read it before running. Preflight validates the review marker to confirm the plan hasn't drifted since it was reviewed, but the marker is a content hash, not a cryptographic signature of the reviewer — it does not attest that anyone trustworthy approved the command.
 
-If you need a stronger guarantee, review the phase `Test command:` lines before running `/conduct`, or override with `--test-cmd <your-own-cmd>` to ignore the plan's slot entirely.
+If you need a stronger guarantee, review the phase `Test command:` and `Validation cmd:` lines before running `/conduct`, or override with `--test-cmd <your-own-cmd>` to ignore the test slot entirely.
 
 ## Known Limitations
 
@@ -277,6 +290,6 @@ If you need a stronger guarantee, review the phase `Test command:` lines before 
 
 ## Integration Points
 
-- **Plan format**: `/dev-plan` owns the template. Phases need `**Impl files:**`, `**Test files:**`, and `` **Test command:** `<cmd>` `` slots.
+- **Plan format**: `/dev-plan` owns the template. Phases need `**Impl files:**`, `**Test files:**`, and `` **Test command:** `<cmd>` `` slots; `**Validation cmd:**` is optional for post-test checks that should hand back on failure.
 - **Review marker**: `/review-plan` writes the marker footer after user acceptance. This skill consumes it as the readiness signal.
 - **Fan-out**: a `/fan-out`-spawned Codex session may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out.

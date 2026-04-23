@@ -42,34 +42,46 @@ Use this template when creating new development plans.
 
 ## Implementation Checklist
 
-Each phase MAY include a short contract block directly under the heading. These slots are consumed by `/conduct` to decide how to spawn subagents and run tests; all three are optional but strongly recommended for phases that `/conduct` will execute.
+Each phase SHOULD include a short contract block directly under the heading. These slots are consumed by `/conduct` to decide how to spawn subagents and run tests. Fill them in **every** phase you expect `/conduct` to execute — a phase with no slots falls through to degraded mode (sequential spawn + test fallback) and forfeits the parallel implementer/test-writer split.
 
 - `**Impl files:**` — comma-separated paths or globs the implementer will touch (e.g., `src/foo.py, src/bar/*.ts`)
 - `**Test files:**` — comma-separated paths or globs the test-writer will create/modify
 - `**Test command:**` — the single canonical test invocation for this phase, in backticks (e.g., ``**Test command:** `pytest tests/test_foo.py -v` ``)
+- `**Validation cmd:**` *(optional)* — a post-test check that runs after tests pass, before the boundary commit, in backticks (e.g., ``**Validation cmd:** `python scripts/reprocess_and_diff.py --ids X,Y` ``). Failure hands back to the user rather than triggering a fix loop. Use for reprocess-and-diff against a live DB, staging API probes, or other behaviour an implementer cannot auto-repair.
 
-If `Impl files:` and `Test files:` overlap (same path or one is a subpath of the other), `/conduct` falls back to sequential spawning for that phase. If any slot is absent, `/conduct` falls back to safe defaults (sequential spawn, resolve test command from repo defaults or `--test-cmd`).
+If `Impl files:` and `Test files:` overlap, `/conduct` falls back to sequential spawning for that phase. If any slot is absent, `/conduct` falls back to safe defaults (sequential spawn, resolve test command from repo defaults or `--test-cmd`). If *every* unfinished phase is missing every slot, `/conduct` emits a degraded-mode warning on the first handback.
+
+Each phase MAY include an optional `**Findings:**` subsection that the implementer appends to during execution. Use this to persist diagnostic query results (with explicit filters stated), decision rationale, and any "checked / accepted behaviour" outcomes that would otherwise only live in a spawn report and be lost. `/conduct` subagents stage changes to the plan file like any other file.
 
 ### Phase 1: [Phase Name]
 
 **Impl files:** `path/to/foo.ts, path/to/bar.ts`
 **Test files:** `tests/test_foo.ts`
 **Test command:** `npm test -- tests/test_foo.ts`
+**Validation cmd:** `npm run smoke -- --env staging`
 
 - [ ] Task 1
 - [ ] Task 2
 - [ ] Task 3
 
+**Findings:**
+- (implementer appends query results, decision rationale, or accepted-behaviour notes here as work proceeds)
+
 ### Phase 2: [Phase Name]
 
-**Impl files:** ...
-**Test files:** ...
+**Impl files:** `...`
+**Test files:** `...`
 **Test command:** `...`
 
 - [ ] Task 1
 - [ ] Task 2
 
 ### Phase 3: [Phase Name] (if needed)
+
+**Impl files:** `...`
+**Test files:** `...`
+**Test command:** `...`
+
 - [ ] Task 1
 - [ ] Task 2
 

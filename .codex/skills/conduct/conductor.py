@@ -486,6 +486,7 @@ def _run_phase(
     opts: ConductOptions,
     state: dict,
     phase: Phase,
+    initial_warnings: Optional[list[str]] = None,
 ) -> ConductResult:
     state["iteration_count"] = 0
     state["current_phase_title"] = phase.title
@@ -583,7 +584,7 @@ def _run_phase(
 
         # Resolve test command. If absent and no override → skip-with-warning,
         # go straight to commit.
-        warnings: list[str] = []
+        warnings: list[str] = list(initial_warnings or [])
         if test_cmd is None:
             warnings.append("no test command; skipped tests")
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
@@ -594,6 +595,19 @@ def _run_phase(
         # Step 5: run tests.
         result = opts.test_runner(test_cmd, opts.test_timeout)
         if result.returncode == 0 and not result.timed_out:
+            if phase.validation_command:
+                validation = opts.test_runner(phase.validation_command, opts.test_timeout)
+                if validation.returncode != 0 or validation.timed_out:
+                    state["status"] = "awaiting_user"
+                    state["blocker"] = f"Phase {phase.label} validation failed"
+                    _persist_state(opts, state)
+                    return ConductResult(
+                        status="awaiting_user",
+                        state=state,
+                        summary=state["blocker"],
+                        diagnostic=validation.output[-2000:],
+                    )
+                warnings.append("validation passed")
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
             if commit_outcome.status != "running":
                 return commit_outcome
@@ -691,6 +705,12 @@ def _commit_phase(
 
     commit_msg = f"conduct: phase {phase.label} — {phase.title}"
     proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
+    if proc.returncode != 0:
+        unstaged = _git(["diff", "--name-only"], opts.repo_root, check=False).stdout.strip()
+        if unstaged:
+            warnings.append("pre-commit hook modified files; re-staged and retrying")
+            _git(["add", "-u"], opts.repo_root, check=False)
+            proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
     if proc.returncode != 0:
         # Pre-commit hook failure → route into fix loop.
         state["iteration_count"] += 1
@@ -802,6 +822,14 @@ def conduct(opts: ConductOptions) -> ConductResult:
         phases = [p for p in parse_phases(plan_text) if not p.is_complete]
         # phase_index in state is the count of completed phases.
         idx = len(state.get("completed_phases", []))
+        handback_warnings: list[str] = []
+        if idx == 0 and phases and not any(p.has_any_slot() for p in phases):
+            handback_warnings.append(
+                "no phase declares Impl files: / Test files: / Test command: / "
+                "Validation cmd: slots — running in degraded mode. "
+                "Fill these per-phase in the plan (see /dev-plan) to enable "
+                "parallel spawn and real test runs."
+            )
         if idx >= len(phases):
             state["status"] = "complete"
             state["phase_index"] = len(phases)
@@ -811,7 +839,7 @@ def conduct(opts: ConductOptions) -> ConductResult:
 
         phase = phases[idx]
         try:
-            return _run_phase(opts, state, phase)
+            return _run_phase(opts, state, phase, initial_warnings=handback_warnings)
         except _CommitHookFailure as hook_fail:
             # Re-enter the loop with hook output as the failure context. Easiest
             # way is recursion with the failure carried via state — but state
@@ -819,7 +847,13 @@ def conduct(opts: ConductOptions) -> ConductResult:
             # by routing back into _run_phase with prior_diff / test_failures
             # set on the next request. To keep the implementation simple we
             # adopt an explicit retry here.
-            return _retry_after_hook_failure(opts, state, phase, hook_fail.output)
+            return _retry_after_hook_failure(
+                opts,
+                state,
+                phase,
+                hook_fail.output,
+                initial_warnings=handback_warnings,
+            )
 
 
 def _retry_after_hook_failure(
@@ -827,6 +861,7 @@ def _retry_after_hook_failure(
     state: dict,
     phase: Phase,
     hook_output: str,
+    initial_warnings: Optional[list[str]] = None,
 ) -> ConductResult:
     """Respawn implementer with hook output as test_failures, then re-enter.
 
@@ -840,6 +875,7 @@ def _retry_after_hook_failure(
 
     respawn_role = "implementer"
     while True:
+        validation_passed = False
         req = SpawnRequest(
             role=respawn_role,
             plan_path=str(opts.plan_path),
@@ -894,8 +930,23 @@ def _retry_after_hook_failure(
                 hook_output = result.output
                 iteration = state["iteration_count"]
                 continue
+        if phase.validation_command:
+            validation = opts.test_runner(phase.validation_command, opts.test_timeout)
+            if validation.returncode != 0 or validation.timed_out:
+                state["status"] = "awaiting_user"
+                state["blocker"] = f"Phase {phase.label} validation failed"
+                _persist_state(opts, state)
+                return ConductResult(
+                    status="awaiting_user",
+                    state=state,
+                    summary=state["blocker"],
+                    diagnostic=validation.output[-2000:],
+                )
+            validation_passed = True
 
-        warnings: list[str] = []
+        warnings: list[str] = list(initial_warnings or [])
+        if validation_passed:
+            warnings.append("validation passed")
         try:
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
         except _CommitHookFailure as exc:

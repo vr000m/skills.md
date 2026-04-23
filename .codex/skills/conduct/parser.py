@@ -18,6 +18,10 @@ TEST_COMMAND_RE = re.compile(
     r"^\*\*Test command:\*\*\s+`([^`]+)`\s*$"
 )
 
+VALIDATION_COMMAND_RE = re.compile(
+    r"^\*\*Validation cmd:\*\*\s+`([^`]+)`\s*$"
+)
+
 IMPL_FILES_RE = re.compile(r"^\*\*Impl files:\*\*\s+(.+?)\s*$")
 TEST_FILES_RE = re.compile(r"^\*\*Test files:\*\*\s+(.+?)\s*$")
 
@@ -35,7 +39,17 @@ class Phase:
     impl_files: list[str] | None = None
     test_files: list[str] | None = None
     test_command: str | None = None
+    validation_command: str | None = None
     is_complete: bool = False
+
+    def has_any_slot(self) -> bool:
+        """True if this phase declares any conduct contract slot."""
+        return bool(
+            self.impl_files
+            or self.test_files
+            or self.test_command
+            or self.validation_command
+        )
 
 
 def _split_checklist(plan_text: str) -> list[str]:
@@ -85,7 +99,10 @@ def parse_phases(plan_text: str) -> list[Phase]:
     for phase in phases:
         phase.impl_files = _parse_file_list(phase.body_lines, IMPL_FILES_RE)
         phase.test_files = _parse_file_list(phase.body_lines, TEST_FILES_RE)
-        phase.test_command = _parse_test_command(phase.body_lines)
+        phase.test_command = _parse_backtick_command(phase.body_lines, TEST_COMMAND_RE)
+        phase.validation_command = _parse_backtick_command(
+            phase.body_lines, VALIDATION_COMMAND_RE
+        )
         phase.is_complete = _all_checkboxes_ticked(phase.body_lines)
 
     return phases
@@ -102,12 +119,19 @@ def _parse_file_list(body_lines: list[str], pattern: re.Pattern[str]) -> list[st
     return None
 
 
-def _parse_test_command(body_lines: list[str]) -> str | None:
-    matches = [TEST_COMMAND_RE.match(line) for line in body_lines]
+def _parse_backtick_command(
+    body_lines: list[str], pattern: re.Pattern[str]
+) -> str | None:
+    matches = [pattern.match(line) for line in body_lines]
     matches = [m for m in matches if m]
     if not matches:
         return None
     return matches[0].group(1)
+
+
+def _parse_test_command(body_lines: list[str]) -> str | None:
+    """Back-compat alias used by older call sites and tests."""
+    return _parse_backtick_command(body_lines, TEST_COMMAND_RE)
 
 
 def _all_checkboxes_ticked(body_lines: list[str]) -> bool:

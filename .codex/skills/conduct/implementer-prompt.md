@@ -76,6 +76,7 @@ Output discipline: your reply must contain **exactly one** fenced ```json block,
 - `files_changed` lists every staged path. Empty list only if you made no changes.
 - Set `blocked: true` only if the phase cannot be completed as specified; put the reason in `explanation`.
 - `needs_test_coverage` lists behaviours you implemented that the test-writer should cover but that the plan did not call out explicitly.
+- If your `summary` cites diagnostic numbers (counts, ratios, percentages) from queries you ran, state every filter you applied — especially lifecycle filters (`archived=0`, `deleted IS NULL`, `superseded_by IS NULL`, soft-delete or status columns). A ratio without its filter is misleading in a summary-only report and can drive wrong decisions downstream.
 
 Exit when the JSON block is written. Do not wait for further instructions.
 ```

@@ -12,6 +12,7 @@ import textwrap
 from conduct.parser import (
     PHASE_HEADING_RE,
     TEST_COMMAND_RE,
+    VALIDATION_COMMAND_RE,
     files_overlap,
     parse_phases,
 )
@@ -56,6 +57,11 @@ def test_test_command_regex_rejects_unbacked():
     assert TEST_COMMAND_RE.match("**Test command:** pytest -q") is None
 
 
+def test_validation_command_regex_matches_backticks():
+    m = VALIDATION_COMMAND_RE.match("**Validation cmd:** `python smoke.py`")
+    assert m and m.group(1) == "python smoke.py"
+
+
 def test_parse_phases_picks_phases_in_order_with_slots():
     plan = textwrap.dedent(
         """\
@@ -77,6 +83,7 @@ def test_parse_phases_picks_phases_in_order_with_slots():
         **Impl files:** src/c.py
         **Test files:** src/c.py
         **Test command:** `pytest tests/test_c.py`
+        **Validation cmd:** `python verify.py`
 
         - [ ] todo
 
@@ -100,10 +107,12 @@ def test_parse_phases_picks_phases_in_order_with_slots():
     assert phases[0].test_files == ["tests/test_a.py"]
     assert phases[0].test_command == "pytest tests/test_a.py -v"
     assert phases[1].test_command == "pytest tests/test_c.py"
+    assert phases[1].validation_command == "python verify.py"
     # Missing slots → None
     assert phases[2].impl_files is None
     assert phases[2].test_files is None
     assert phases[2].test_command is None
+    assert phases[2].validation_command is None
 
 
 def test_parse_phases_multiple_test_commands_picks_first():
