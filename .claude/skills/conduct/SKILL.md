@@ -248,6 +248,14 @@ Schema:
 - `flock(1)` is NOT used — unavailable by default on macOS.
 - Two `/conduct` invocations on the same plan in the same worktree race on the same lock. Sibling worktrees resolve to distinct repo-roots via `git rev-parse --show-toplevel` and therefore distinct state files.
 
+## Trust Boundary
+
+**The plan's `Test command:` slot is executed as a shell command** (via `runner.run_tests` with `shell=True`). Running `/conduct` on a plan is therefore equivalent in trust to running `make test`, `npm test`, or `cargo test` on a branch you checked out — the plan author chooses what gets executed.
+
+Treat a dev plan received from someone else (a teammate's branch, an external PR, a forwarded file) the same way you'd treat a `Makefile` or `package.json` from that source: read it before running. Preflight validates the review marker to confirm the plan hasn't drifted since it was reviewed, but the marker is a content hash, not a cryptographic signature of the reviewer — it does not attest that anyone trustworthy approved the command.
+
+If you need a stronger guarantee, review the phase `Test command:` lines before running `/conduct`, or override with `--test-cmd <your-own-cmd>` to ignore the plan's slot entirely.
+
 ## Known Limitations
 
 - **No agent wall-clock timeout.** The `Agent` tool is synchronous within the parent turn and exposes no PID, so `--agent-timeout` is not enforceable in v1. Mitigated by the fix-loop cap plus explicit iteration counts in prompts. Test-runner timeout is real because the test command is a subprocess.
