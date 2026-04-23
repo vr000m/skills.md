@@ -875,3 +875,87 @@ def test_phase_with_no_slot_falls_back_to_repo_default(repo):
     )
     assert result.status == "awaiting_user"
     assert runner.calls and runner.calls[0][0] == "uvx pytest"
+
+
+def test_state_file_written_by_conduct_matches_documented_schema(repo):
+    """Round-trip through conduct() and assert the on-disk state has the
+    documented keys. Guards against drift between SKILL.md's schema block,
+    STATE_REQUIRED_KEYS, and what conductor.py actually persists.
+    """
+    from tests.test_state import STATE_REQUIRED_KEYS  # type: ignore
+
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    state_path = repo / ".conduct" / f"state-{plan.stem}.json"
+    on_disk = json.loads(state_path.read_text())
+    missing = STATE_REQUIRED_KEYS - on_disk.keys()
+    assert not missing, f"conductor-written state missing keys: {missing}"
+    assert on_disk["last_summary"], "last_summary should be populated on handback"
+    assert len(on_disk["plan_content_hash"]) == 40
+
+
+def test_nested_precommit_hook_failure_inside_retry_loop_recovers(repo):
+    """Chain two hook failures: first commit fails, retry loop attempts a
+    second commit, hook fails again, third attempt succeeds. Exercises the
+    inner ``except _CommitHookFailure`` in ``_retry_after_hook_failure`` —
+    the code path that handles a hook-fail inside a hook-retry iteration.
+    """
+    hooks_dir = repo / ".git" / "hooks"
+    counter = repo / ".hook-counter"
+    counter.write_text("0\n")
+    hook = hooks_dir / "pre-commit"
+    hook.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/bin/sh
+            n=$(cat {counter})
+            echo $((n+1)) > {counter}
+            if [ "$n" = "0" ] || [ "$n" = "1" ]; then
+              echo "hook failure $n" >&2
+              exit 1
+            fi
+            exit 0
+            """
+        )
+    )
+    hook.chmod(0o755)
+
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+
+    def attempt(req, r):
+        _stage(r, "src/a.py", f"v={req.iteration}\n")
+        return _impl_report(req.iteration, ["src/a.py"])
+
+    spawner.script("implementer", 0, attempt)
+    spawner.script("implementer", 1, attempt)
+    spawner.script("implementer", 2, attempt)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    # Three _passing() results so every test invocation (initial + two retries)
+    # returns success and the failure mode under test is the hook, not tests.
+    runner = StubTestRunner(queue=[_passing(), _passing(), _passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user", result
+    # Two hook failures consumed two fix-loop iterations.
+    assert result.state["iteration_count"] == 2
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "phase 1" in log
+    impl_calls = [c for c in spawner.calls if c.role == "implementer"]
+    # Every hook failure should have been surfaced to a respawned implementer.
+    hook_failures_seen = [c for c in impl_calls if "hook failure" in c.test_failures]
+    assert len(hook_failures_seen) >= 2

@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from lock import StateLock
-from marker import marker_is_stale, read_marker
+from marker import compute_plan_hash, marker_is_stale, read_marker
 from parser import Phase, files_overlap, parse_phases
 from runner import TestResult, run_tests
 from schema import SchemaError, parse_report
@@ -181,15 +181,21 @@ def _load_or_init_state(opts: ConductOptions) -> dict:
     sp = _state_path(opts)
     if sp.exists():
         state = json.loads(sp.read_text())
+        # Backfill keys that older state files may be missing so that downstream
+        # consumers can rely on the documented schema.
+        state.setdefault("plan_content_hash", compute_plan_hash(opts.plan_path))
+        state.setdefault("last_summary", "")
         if opts.resume:
             state["resume_base_sha"] = _head_sha(opts.repo_root)
             state["status"] = "running"
         return state
     return {
         "plan_path": str(opts.plan_path),
+        "plan_content_hash": compute_plan_hash(opts.plan_path),
         "base_sha": _head_sha(opts.repo_root),
         "phase_index": 0,
         "completed_phases": [],
+        "last_summary": "",
         "iteration_count": 0,
         "status": "running",
         "blocker": None,
@@ -391,29 +397,23 @@ def _run_phase(
         test_text: Optional[str] = None
 
         if iteration == 0:
+            # In an LLM-driven run the parallel-vs-sequential signal tells main
+            # Claude whether to issue both Agent calls in one message (parallel)
+            # or issue the implementer first and the test-writer after
+            # (sequential, when paths overlap). From the harness's perspective
+            # both calls still reach opts.spawn; the ordering distinction is an
+            # LLM-layer concern, not a module-layer one.
             impl_text = opts.spawn(req)
-            if strategy == "parallel":
-                test_req = SpawnRequest(
-                    role="test-writer",
-                    plan_path=req.plan_path,
-                    phase_position=req.phase_position,
-                    phase_label=req.phase_label,
-                    phase_title=req.phase_title,
-                    iteration=0,
-                    base_sha=req.base_sha,
-                )
-                test_text = opts.spawn(test_req)
-            else:
-                test_req = SpawnRequest(
-                    role="test-writer",
-                    plan_path=req.plan_path,
-                    phase_position=req.phase_position,
-                    phase_label=req.phase_label,
-                    phase_title=req.phase_title,
-                    iteration=0,
-                    base_sha=req.base_sha,
-                )
-                test_text = opts.spawn(test_req)
+            test_req = SpawnRequest(
+                role="test-writer",
+                plan_path=req.plan_path,
+                phase_position=req.phase_position,
+                phase_label=req.phase_label,
+                phase_title=req.phase_title,
+                iteration=0,
+                base_sha=req.base_sha,
+            )
+            test_text = opts.spawn(test_req)
         else:
             text = opts.spawn(req)
             if respawn_role == "implementer":
@@ -641,8 +641,6 @@ def _handback(
     strategy_reason: str,
     warnings: list[str],
 ) -> ConductResult:
-    state["status"] = "awaiting_user"
-    _persist_state(opts, state)
     summary = (
         f"Phase {phase.label}: {phase.title}\n"
         f"  Spawn: {strategy} ({strategy_reason})\n"
@@ -650,6 +648,9 @@ def _handback(
         f"  Iterations: {iteration}\n"
         + ("".join(f"  Warning: {w}\n" for w in warnings) if warnings else "")
     )
+    state["status"] = "awaiting_user"
+    state["last_summary"] = summary
+    _persist_state(opts, state)
     next_cmd = f"Run: /conduct --resume {opts.plan_path}"
     result = ConductResult(
         status="awaiting_user",
@@ -786,6 +787,8 @@ def _retry_after_hook_failure(
                 continue
 
         warnings: list[str] = []
+        if test_cmd is None:
+            warnings.append("no test command; skipped tests")
         try:
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
         except _CommitHookFailure as exc:
