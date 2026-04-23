@@ -11,6 +11,7 @@ fi
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+CLAUDE_ONLY_SKILLS="${CLAUDE_ONLY_SKILLS:-conduct}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -20,6 +21,7 @@ if [[ "${1:-}" != "--yes" ]]; then
 fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
+read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 
 copy_reference_files_to_global() {
 	local repo_references_code="$ROOT_DIR/.codex/skills/content-review/references"
@@ -36,6 +38,17 @@ for skill in "${managed_skills[@]}"; do
 	mkdir -p "$GLOBAL_CODEX_SKILLS_DIR/$skill" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
 	rsync -a --delete "$ROOT_DIR/.codex/skills/$skill/" "$GLOBAL_CODEX_SKILLS_DIR/$skill/"
 	rsync -a --delete "$ROOT_DIR/.claude/skills/$skill/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+done
+
+for skill in "${claude_only_skills[@]}"; do
+	src="$ROOT_DIR/.claude/skills/$skill"
+	if [[ ! -d "$src" ]]; then
+		echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
+		continue
+	fi
+	mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
+	rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+	echo "Promoted Claude-only skill: $skill"
 done
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
