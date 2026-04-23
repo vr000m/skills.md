@@ -52,7 +52,7 @@ This plan was shaped by three `/review-plan` cycles. v1 → v2 resolved worktree
 - **Stale-marker check**: recompute the hash per the rule above and compare to the marker's recorded hash; mismatch → treat as unreviewed.
 - **Pre-commit health check**: run the repo's pre-commit / lint in non-fix mode on the unchanged tree (`pre-commit run --all-files`, or fall back to `make lint`/`npm run lint`/`ruff check .` per repo idiom, or skip if none). If it already fails, hard-stop with `Tree has pre-existing lint/hook failures; fix them before running /conduct` — this prevents subagent fix-loops chasing issues they didn't introduce.
 - If marker absent or stale: hard-stop with `Run: /review-plan <plan-path>` and exit.
-- Load `<repo-root>/.conduct/state-<plan-basename>.json` if present. Support `--resume`, `--status`, `--abort-run`, `--pause-phase` (see Abort semantics).
+- Load `<repo-root>/.conduct/state-<plan-id>.json` if present, where `plan-id` is the basename plus a short hash of the repo-relative plan path. Support `--resume`, `--status`, `--abort-run`, `--pause-phase` (see Abort semantics).
 - Parse phases from `## Implementation Checklist` using regex: `^###\s+Phase\s+(\S+)\s*:\s*(.+?)\s*(\([^)]*\))?\s*$` (captures phase label + title, handles colons in title tail, strips parenthesised annotations). Skip phases whose task checkboxes are all `- [x]`. Order by document position; record both the document position (0-based) and the Phase label verbatim.
 
 ### Per-phase workflow
@@ -69,7 +69,7 @@ For each unfinished phase:
 
 3. **Spawn subagents** via the harness-native worker API. Claude uses the `Agent` tool with `subagent_type: general-purpose`; Codex uses `spawn_agent` / `wait_agent` / `close_agent`. Shared workspace. Each gets a filled prompt template — no parent conversation history is passed. Wall-clock timeouts for workers are harness-dependent; where the worker API does not expose a PID or timeout control, document that limitation and rely on the bounded fix loop + explicit iteration count in prompts.
 
-4. **Await both.** Each subagent MUST emit a final fenced ` ```json ` block matching the schema below. If the report is malformed, the conductor hands back with a `schema_error` status in state — no retry. A clean-context respawn cannot meaningfully consume "your output didn't match schema" because the new subagent has no memory of the prior attempt. The user decides whether to re-run `/conduct --resume` or adjust the prompt.
+4. **Await both.** Each subagent MUST emit a final fenced ` ```json ` block matching the schema below. If the report is malformed, the conductor hands back with a `schema_error` status in state — no retry. A clean-context respawn cannot meaningfully consume "your output didn't match schema" because the new subagent has no memory of the prior attempt. The user decides whether to re-run `/conduct --resume` or adjust the prompt. If a worker explicitly reports `flags.blocked = true`, or a test-writer reports `needs_impl_clarification`, the conductor persists `state.status = "blocked"` and hands back before tests or commit.
 
 5. **Run tests.** Resolve test command in this order:
    - `--test-cmd` CLI flag
@@ -77,7 +77,7 @@ For each unfinished phase:
    - Repo default from `package.json` scripts.test, `pyproject.toml` `[tool.pytest.ini_options]`, or `Makefile` `test` target
    - If none: warn, skip tests for this phase, flag in state and handback message.
 
-   Test runner wall-clock is enforced via the Python-native runner (`subprocess.run(timeout=...)`): default 5 min, override via `--test-timeout`. Enforcement is real because the test runner is a subprocess; this differs from the worker-timeout note above.
+   Test runner wall-clock is enforced via the Python-native runner's dedicated subprocess session and process-group kill path: default 5 min, override via `--test-timeout`. Enforcement is real because the test runner is a subprocess; this differs from the worker-timeout note above.
 
 6. **Fix loop, bounded at N=3** (override `--max-iterations`). **No classifier.** On failure:
    - Pass full test-runner output + prior diff + iteration count to a respawned implementer.
@@ -85,7 +85,7 @@ For each unfinished phase:
    - If the respawned implementer sets `test_contract_mismatch: true`, conductor instead respawns the test-writer with the same failures on the next iteration.
    - Iteration count persists to state file after each attempt (crash recovery).
    - Pre-commit hook failures on the phase boundary commit (step 8) count as fix-loop iterations, routed to implementer with the hook output in place of test failures.
-   - On cap reached: hand back with blocker message `Phase N stalled after 3 iterations; see .conduct/state-<plan>.json for diff and failure history.` Do not auto-advance.
+   - On cap reached: hand back with blocker message `Phase N stalled after 3 iterations; see .conduct/state-<plan-id>.json for diff and failure history.` Do not auto-advance.
 
 7. **Optional mid-phase lightweight review.** Conductor MAY spawn a single reviewer subagent (never `/deep-review`) when diff > 200 lines, > 3 files touched, or phase tagged high-risk in Review Focus. One-shot, not looped. Reviewer's findings are logged but do not block phase completion.
 
@@ -103,7 +103,7 @@ For each unfinished phase:
 
 ### State file
 
-`<repo-root>/.conduct/state-<plan-basename>.json`. Repo-root resolved via `git rev-parse --show-toplevel`. `.conduct/` added to `.gitignore`.
+`<repo-root>/.conduct/state-<plan-id>.json`, where `plan-id` is the basename plus a short hash of the repo-relative plan path. Repo-root resolved via `git rev-parse --show-toplevel`. `.conduct/` added to `.gitignore`.
 
 Schema:
 
@@ -120,12 +120,12 @@ Schema:
   ],
   "last_summary": "...",
   "iteration_count": 0,
-  "status": "awaiting_user | running | blocked | schema_error | complete",
+  "status": "awaiting_user | running | paused | blocked | schema_error | complete",
   "blocker": null
 }
 ```
 
-**Lockfile**: conductor acquires an advisory lock on `.conduct/state-<plan-basename>.json.lock` before writing. Primary mechanism is a small Python helper (`conduct/lock.py`) that uses `fcntl.flock` on the lockfile fd — portable across macOS and Linux without extra tooling. Fallback if Python is unavailable: atomic `mkdir` lockdir. Stale locks older than 1 h are broken with a warning. `flock(1)` is NOT used — it is not present by default on macOS. Two `/conduct` invocations on the same plan in the same worktree race on the same lock; across sibling worktrees each has its own state file (distinct `git rev-parse --show-toplevel`).
+**Lockfile**: conductor acquires an advisory lock on `.conduct/state-<plan-id>.json.lock` before writing. Primary mechanism is a small Python helper (`conduct/lock.py`) that uses `fcntl.flock` on the lockfile fd — portable across macOS and Linux without extra tooling. Fallback if Python is unavailable: atomic `mkdir` lockdir. Stale fallback lockdirs older than 1 h are broken only when their recorded pid is gone. `flock(1)` is NOT used — it is not present by default on macOS. Two `/conduct` invocations on the same plan in the same worktree race on the same lock; across sibling worktrees each has its own state file (distinct `git rev-parse --show-toplevel`).
 
 ### Abort semantics
 
@@ -309,7 +309,7 @@ All reports use two distinct phase identifiers:
 Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the Claude-first documentation pass; Phase 8 carries the Codex incarnation and any remaining cross-harness contract cleanup.
 
 - [x] `AGENTS.md`: add `/conduct` to skill index; reword the depth-invariant paragraph to preserve existing vocabulary: "Workers launched in a fresh Claude subprocess (e.g., via `fan-out.sh spawn`) start a new orchestrator/worker tree and may themselves act as orchestrators; the one-level rule applies per-tree."
-- [x] `README.md`: document `conduct` in the skill matrix and explain the Claude-only rollout path (`CLAUDE_ONLY_SKILLS="conduct"`) while Codex parity is still deferred.
+- [x] `README.md`: during the Claude-first milestone, document `conduct` in the skill matrix and explain the temporary Claude-only rollout path (`CLAUDE_ONLY_SKILLS="conduct"`). Phase 8 removes that temporary exception in the final repo plumbing.
 - [x] `.claude/skills/dev-plan/SKILL.md`: add pointer to `/conduct` as the "execute a reviewed plan" companion; mention the per-phase `Impl files:` / `Test files:` / `Test command:` slots
 - [x] `.claude/skills/review-plan/SKILL.md`: document the marker footer it writes and that `/conduct` consumes it
 - [x] `.claude/skills/fan-out/SKILL.md`: note that a fan-out-spawned subprocess may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out
@@ -323,7 +323,7 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the C
 
 - [x] Create `.codex/skills/conduct/` as a Codex-native orchestration skill. Preserve the phase-by-phase conduct model, but adapt worker control to `spawn_agent` / `wait_agent` / `close_agent` rather than Claude's `Agent` tool.
 - [x] Add Codex-side helper modules (`conductor.py`, `parser.py`, `marker.py`, `schema.py`, `runner.py`, `lock.py`) under `.codex/skills/conduct/`. Do not rely implicitly on `.claude/skills/conduct/` paths at runtime.
-- [x] Keep the same plan-readiness contract: Codex `/conduct` consumes the same review marker format, per-phase `Impl files:` / `Test files:` / `Test command:` slots, JSON report schemas, and `.conduct/state-<plan>.json` shape as Claude `/conduct`.
+- [x] Keep the same plan-readiness contract: Codex `/conduct` consumes the same review marker format, per-phase `Impl files:` / `Test files:` / `Test command:` slots, JSON report schemas, and `.conduct/state-<plan-id>.json` shape as Claude `/conduct`.
 - [x] Decide and document the Codex fallback policy when delegated subagents are unavailable in the current runtime: either sequential main-session execution with the same prompt/report contract, or an explicit hard-stop. Do not silently degrade into a different workflow.
 - [x] Update `.codex/skills/dev-plan/template.md` and `.codex/skills/dev-plan/SKILL.md` so plans authored in Codex carry the same per-phase slots required by `/conduct`.
 - [x] Update `.codex/skills/review-plan/SKILL.md` so a plan reviewed in Codex can become `/conduct`-ready by emitting the same trailing marker footer after user acceptance. If the repo rejects that portability, document the asymmetry explicitly instead of leaving it implicit.
@@ -365,7 +365,7 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the C
 - `.claude/skills/conduct/parser.py` — phase-heading regex, `Test command:` regex, overlap check.
 - `.claude/skills/conduct/marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
 - `.claude/skills/conduct/schema.py` — last-fenced-block extractor + role-specific JSON report validator (stdlib only, raises `SchemaError`).
-- `.claude/skills/conduct/runner.py` — test subprocess wrapper using Python-native `subprocess.run(timeout=...)`; no GNU `timeout` dependency.
+- `.claude/skills/conduct/runner.py` — test subprocess wrapper using a Python-native subprocess session with explicit process-group termination; no GNU `timeout` dependency.
 - `.claude/skills/conduct/lock.py` — `fcntl.flock` helper with mkdir fallback.
 - `.claude/skills/conduct/tests/test_parser.py`
 - `.claude/skills/conduct/tests/test_marker.py`
@@ -406,7 +406,7 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the C
 - **Commit per phase** at the boundary by the conductor. Subagents stage only. Rogue commits by subagents are detected (not corrected) via HEAD-comparison. Pre-commit-hook failure on the boundary commit = fix-loop iteration.
 - **Review marker** = `<!-- reviewed: YYYY-MM-DD @ <hash> -->` as the final line only; hash = `git hash-object` of plan with final marker line stripped (idempotent on re-review).
 - **`/review-plan` owns a carve-out** in its no-modify contract: plan body stays immutable, marker footer is the single exception.
-- **State file** at `<repo-root>/.conduct/state-<plan-basename>.json` with Python `fcntl.flock` lockfile (NOT `flock(1)` — unavailable on macOS by default).
+- **State file** at `<repo-root>/.conduct/state-<plan-id>.json` with Python `fcntl.flock` lockfile (NOT `flock(1)` — unavailable on macOS by default).
 - **Pre-commit health check at preflight** so fix-loops don't chase pre-existing lint failures.
 - **Worker timeout enforcement is harness-dependent.** Claude's `Agent` tool gives no PID, so worker wall-clock enforcement there is not available in v1. Test-runner timeout is real because it is enforced by a normal subprocess wrapper.
 - **No keyword handback.** Exit message prints the literal `/conduct --resume <plan>` command; user copies and runs.
@@ -422,7 +422,7 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the C
 - `python3` (for `lock.py`, `runner.py`, and friends — ships with macOS and most Linuxes by default; if absent, atomic `mkdir` lockdir fallback)
 - Phase 1 (`/review-plan` marker) — blocking prerequisite for `/conduct` to be usable
 
-Note: the earlier GNU `timeout` / `gtimeout` dependency was dropped. `runner.py` uses Python-native `subprocess.run(timeout=...)`, which is portable across macOS and Linux without extra packages.
+Note: the earlier GNU `timeout` / `gtimeout` dependency was dropped. `runner.py` uses a Python-native subprocess session with explicit process-group termination, which is portable across macOS and Linux without extra packages.
 
 ### Integration Seams
 
@@ -433,7 +433,7 @@ Note: the earlier GNU `timeout` / `gtimeout` dependency was dropped. `runner.py`
 | Implementer contract | `/conduct` | implementer subagent | Filled template as full prompt; final ` ```json ` block with role, files_changed, summary, flags.{blocked, test_contract_mismatch, explanation, needs_test_coverage} |
 | Test-writer contract | `/conduct` | test-writer subagent | Filled template as full prompt; final ` ```json ` block with role, test_files_added, test_commands, coverage_summary, flags.{blocked, needs_impl_clarification} |
 | Reviewer contract (opt.) | `/conduct` | reviewer subagent | Filled template; final ` ```json ` block with findings list |
-| State persistence | `/conduct` | itself (resume) | `<repo-root>/.conduct/state-<plan-basename>.json`, schema in Requirements §"State file"; `flock` lockfile |
+| State persistence | `/conduct` | itself (resume) | `<repo-root>/.conduct/state-<plan-id>.json`, schema in Requirements §"State file"; `flock` lockfile |
 | Handback | `/conduct` | user | Structured summary + literal `Run: /conduct --resume <plan>` line; skill exits |
 | Claude worker orchestration | Claude runtime | `/conduct` | `Agent`-tool workers, no parent conversation history, harness-specific timeout limitations |
 | Codex worker orchestration | Codex runtime | `/conduct` | `spawn_agent` / `wait_agent` / `close_agent` workers, same report/state contract, Codex-native fallback policy documented in Phase 8 |
@@ -500,7 +500,7 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 
 ### Issue 10: Missing timeouts leave conductor hung
 - **Problem**: Subagent or test-runner hang → conductor waits forever.
-- **Solution**: Test-runner wall-clock is enforced via the Python-native runner (`subprocess.run(timeout=...)`, `--test-timeout 5m` default). Worker-timeout is harness-dependent; Claude's `Agent` tool gives no PID, so that limitation is documented for v1 and mitigated by the fix-loop cap.
+- **Solution**: Test-runner wall-clock is enforced via the Python-native runner's dedicated subprocess session plus process-group termination (`--test-timeout` default 5m). Worker-timeout is harness-dependent; Claude's `Agent` tool gives no PID, so that limitation is documented for v1 and mitigated by the fix-loop cap.
 - **Files affected**: `.claude/skills/conduct/SKILL.md`
 
 ### Issue 11: `/review-plan` immutability contract conflicts with marker-writing
@@ -548,9 +548,9 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 - **Solution**: Keep `deep-review` focused on diffs and `Review Focus`. Only update docs/examples if they mention `/conduct`; do not create a runtime dependency on `.conduct` state unless a later design explicitly needs it.
 - **Files affected**: `AGENTS.md`, optionally `.codex/skills/deep-review/SKILL.md`
 
-### Issue 20: Repo sync/promote/bootstrap plumbing still treats `conduct` as Claude-only
-- **Problem**: Even if `.codex/skills/conduct/` is created, the repo's distribution machinery still keeps `conduct` out of the mirrored skill set. README, AGENTS, and the four sync/promote/bootstrap/check scripts currently route `conduct` through `CLAUDE_ONLY_SKILLS`.
-- **Solution**: Phase 8 must update the distribution defaults and docs in the same branch that lands Codex `conduct`. Otherwise the repo will advertise a Codex skill that the normal promote/sync/bootstrap workflow does not manage.
+### Issue 20: Repo sync/promote/bootstrap plumbing treated `conduct` as Claude-only before Phase 8
+- **Problem**: Before Phase 8, the repo's distribution machinery kept `conduct` out of the mirrored skill set. README, AGENTS, and the four sync/promote/bootstrap/check scripts routed `conduct` through `CLAUDE_ONLY_SKILLS`.
+- **Solution**: Phase 8 updated the distribution defaults and docs in the same branch that landed Codex `conduct`, so the repo no longer advertises a Codex skill that the normal promote/sync/bootstrap workflow does not manage.
 - **Files affected**: `README.md`, `AGENTS.md`, `.env.example`, `scripts/sync-skills.sh`, `scripts/promote-skills.sh`, `scripts/bootstrap-skills.sh`, `scripts/check-sync.sh`
 
 ### Issue 21: Codex implementation seam is unspecified
@@ -569,7 +569,7 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 - [x] Rogue commits by subagents are detected via HEAD comparison and flagged in state; conductor does not stack a second commit. Covered by `tests/test_conductor_harness.py::test_rogue_commit_detection_does_not_stack_a_second_commit`.
 - [x] All subagent prompts are filled templates; no inline prose in the body of `SKILL.md` other than workflow text. `implementer-prompt.md`, `test-writer-prompt.md`, `reviewer-prompt.md` ship as standalone templates with placeholders only; SKILL.md references them by path. `tests/test_skill_spawn_grep.sh` enforces the no-skill-spawn contract.
 - [x] `/review-plan` writes the marker after user acceptance; `review-plan/SKILL.md` constraint lines updated to reflect the footer carve-out; Phase 1 shipped independently before Phase 6 self-host. `.claude/skills/review-plan/SKILL.md` carries the carve-out on lines 13 and 149–176.
-- [x] `<repo-root>/.conduct/state-<plan-basename>.json` supports `--resume`, `--status`, `--pause-phase`, `--abort-run` with Python `fcntl.flock` locking (no dependency on `flock(1)`). Covered by `tests/test_state.py` + harness tests for each flag; `lock.py` uses `fcntl.flock` with atomic `mkdir` fallback.
+- [x] `<repo-root>/.conduct/state-<plan-id>.json` supports `--resume`, `--status`, `--pause-phase`, `--abort-run` with Python `fcntl.flock` locking (no dependency on `flock(1)`). Covered by `tests/test_state.py` + harness tests for each flag; `lock.py` uses `fcntl.flock` with atomic `mkdir` fallback.
 - [x] Commit per phase with message `conduct: phase N — <title>`; author = current git user. Covered by harness tests; self-host commit `fc2d849` (`conduct: phase 6 — Manual verification`) is a real-world demonstration.
 - [x] `--test-timeout` proven by `tests/test_runner.py` (Python-native subprocess timeout, no coreutils dep). `--max-iterations` and `--test-cmd` are conductor-side wiring still pending end-to-end demonstration. (agent-timeout deferred to post-v1.)
 - [x] `--pause-phase` uses `git stash -u`; `--abort-run` only touches state; no `reset --hard` prompts surface. Covered by `tests/test_conductor_harness.py::test_pause_phase_stashes_and_marks_state` and `test_abort_run_deletes_state_without_touching_tree`. `abort_run` also clears the lockfile/lockdir alongside state.

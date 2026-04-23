@@ -25,6 +25,7 @@ LLM-driven harness both target.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -32,11 +33,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from lock import LockError, StateLock, lock_is_held
-from marker import compute_plan_hash, marker_is_stale, read_marker
-from parser import Phase, files_overlap, parse_phases
-from runner import TestResult, run_tests
-from schema import SchemaError, parse_report
+from .lock import LockError, StateLock, lock_is_held
+from .marker import compute_plan_hash, marker_is_stale, read_marker
+from .parser import Phase, files_overlap, parse_phases
+from .runner import TestResult, run_tests
+from .schema import SchemaError, parse_report
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +196,12 @@ def run_preflight(opts: ConductOptions) -> Optional[ConductResult]:
 
 
 def _state_path(opts: ConductOptions) -> Path:
-    return opts.repo_root / ".conduct" / f"state-{opts.plan_path.stem}.json"
+    try:
+        rel_plan = opts.plan_path.resolve().relative_to(opts.repo_root.resolve()).as_posix()
+    except ValueError:
+        rel_plan = opts.plan_path.resolve().as_posix()
+    digest = hashlib.sha1(rel_plan.encode("utf-8")).hexdigest()[:12]
+    return opts.repo_root / ".conduct" / f"state-{opts.plan_path.stem}-{digest}.json"
 
 
 def _normalize_loaded_state(state: dict) -> dict:
@@ -434,6 +440,48 @@ def _phase_baseline(state: dict) -> str:
     return state["base_sha"]
 
 
+def _worker_blocker_result(
+    opts: ConductOptions,
+    state: dict,
+    phase: Phase,
+    *,
+    impl_report: Optional[dict[str, Any]] = None,
+    test_report: Optional[dict[str, Any]] = None,
+) -> Optional[ConductResult]:
+    if impl_report is not None:
+        flags = impl_report.get("flags", {})
+        if flags.get("blocked") is True:
+            detail = flags.get("explanation") or impl_report.get("summary") or "implementer reported blocked"
+            state["status"] = "blocked"
+            state["blocker"] = f"Phase {phase.label} blocked by implementer: {detail}"
+            state["last_summary"] = state["blocker"]
+            _persist_state(opts, state)
+            return ConductResult(
+                status="blocked",
+                state=state,
+                summary=state["blocker"],
+                diagnostic=str(detail),
+            )
+
+    if test_report is not None:
+        flags = test_report.get("flags", {})
+        clarification = flags.get("needs_impl_clarification")
+        if flags.get("blocked") is True or clarification:
+            detail = clarification or test_report.get("coverage_summary") or "test-writer reported blocked"
+            state["status"] = "blocked"
+            state["blocker"] = f"Phase {phase.label} blocked by test-writer: {detail}"
+            state["last_summary"] = state["blocker"]
+            _persist_state(opts, state)
+            return ConductResult(
+                status="blocked",
+                state=state,
+                summary=state["blocker"],
+                diagnostic=str(detail),
+            )
+
+    return None
+
+
 def _run_phase(
     opts: ConductOptions,
     state: dict,
@@ -526,6 +574,12 @@ def _run_phase(
                 summary=f"phase {phase.label} schema error: {exc}",
                 diagnostic=str(exc),
             )
+
+        block_result = _worker_blocker_result(
+            opts, state, phase, impl_report=impl_report, test_report=test_report
+        )
+        if block_result is not None:
+            return block_result
 
         # Resolve test command. If absent and no override → skip-with-warning,
         # go straight to commit.
@@ -805,6 +859,15 @@ def _retry_after_hook_failure(
             state["blocker"] = str(exc)
             _persist_state(opts, state)
             return ConductResult(status="schema_error", state=state, summary=str(exc))
+        block_result = _worker_blocker_result(
+            opts,
+            state,
+            phase,
+            impl_report=report if respawn_role == "implementer" else None,
+            test_report=report if respawn_role == "test-writer" else None,
+        )
+        if block_result is not None:
+            return block_result
         # SKILL.md Step 6: if implementer flagged test_contract_mismatch, the
         # next iteration respawns the test-writer instead.
         if respawn_role == "implementer" and report.get("flags", {}).get("test_contract_mismatch"):

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from marker import (
+from conduct.marker import (
     MARKER_RE,
     compute_plan_hash,
     marker_is_stale,

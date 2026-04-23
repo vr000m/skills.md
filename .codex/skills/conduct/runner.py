@@ -2,8 +2,9 @@
 
 Replaces the previous shell-out to ``timeout``/``gtimeout`` (which is missing
 on stock macOS — the documented --test-timeout flag silently degraded to no
-enforcement). Uses ``subprocess.run(timeout=...)`` so behaviour is identical
-across Linux and macOS without the coreutils dependency.
+enforcement). Uses a dedicated subprocess session plus explicit process-group
+termination on timeout so behaviour is identical across Linux and macOS
+without the coreutils dependency.
 
 The conductor calls ``run_tests`` from Bash via:
 
@@ -15,6 +16,8 @@ TestResult shape, so handback formatting can be uniform.
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -38,17 +41,21 @@ def run_tests(command: str, timeout: float = 300.0) -> TestResult:
 
     start = time.monotonic()
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             command,
             shell=True,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
+            start_new_session=True,
         )
+        stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         elapsed = time.monotonic() - start
+        _terminate_process_group(proc)
+        stdout, stderr = proc.communicate()
         # exc.stdout/stderr are bytes-or-None even with text=True (Python quirk).
-        out = _decode(exc.stdout) + _decode(exc.stderr)
+        out = _decode(exc.stdout) + _decode(stdout) + _decode(exc.stderr) + _decode(stderr)
         return TestResult(
             returncode=-1,
             output=out + f"\n[conduct] test command exceeded {timeout:.0f}s wall clock; killed.\n",
@@ -57,8 +64,8 @@ def run_tests(command: str, timeout: float = 300.0) -> TestResult:
         )
     elapsed = time.monotonic() - start
     return TestResult(
-        returncode=completed.returncode,
-        output=(completed.stdout or "") + (completed.stderr or ""),
+        returncode=proc.returncode,
+        output=(stdout or "") + (stderr or ""),
         timed_out=False,
         duration_seconds=elapsed,
     )
@@ -70,6 +77,22 @@ def _decode(buf: object) -> str:
     if isinstance(buf, bytes):
         return buf.decode("utf-8", errors="replace")
     return str(buf)
+
+
+def _terminate_process_group(proc: subprocess.Popen[str]) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        proc.wait(timeout=1)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
 
 
 def _main(argv: list[str]) -> int:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import textwrap
 
-from parser import (
+from conduct.parser import (
     PHASE_HEADING_RE,
     TEST_COMMAND_RE,
     files_overlap,

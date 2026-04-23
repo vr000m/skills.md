@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from schema import (
+from conduct.schema import (
     SchemaError,
     extract_last_json_block,
     parse_report,

@@ -20,7 +20,7 @@ Helper modules for preflight and state handling:
 - `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
 - `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
 - `schema.py` — last-fenced-block extraction + role-specific report validation (raises `SchemaError`). Stdlib only.
-- `runner.py` — test-command subprocess wrapper with portable wall-clock timeout via `subprocess.run(timeout=...)`. Returns `TestResult(returncode, output, timed_out, duration_seconds)`.
+- `runner.py` — test-command subprocess wrapper with portable wall-clock timeout via a dedicated subprocess session plus explicit process-group termination. Returns `TestResult(returncode, output, timed_out, duration_seconds)`.
 
 Deterministic tests under `tests/` (run via `uvx pytest .codex/skills/conduct/tests/ -v && bash .codex/skills/conduct/tests/test_skill_spawn_grep.sh`).
 
@@ -94,14 +94,14 @@ This prevents subagent fix-loops from chasing issues they didn't introduce.
 
 ### 4. State file load
 
-`<repo-root>/.conduct/state-<plan-basename>.json`, where repo-root comes from `git rev-parse --show-toplevel`.
+`<repo-root>/.conduct/state-<plan-id>.json`, where repo-root comes from `git rev-parse --show-toplevel` and `plan-id` is the plan basename plus a short hash of its repo-relative path.
 
 - If present and `--resume`: load only when both `state.plan_path` and `state.plan_content_hash` still match the current reviewed plan. On match, continue from `phase_index` and refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
 - If present and the stored plan path/hash do not match the current reviewed plan: hard-stop and tell the user to `--abort-run` before starting over.
 - If present without `--resume`: warn, print state summary, suggest `--resume` or `--abort-run`, exit without entering the phase loop.
 - If absent: initialise with `plan_content_hash = compute_plan_hash(plan)`, `base_sha = git rev-parse HEAD`, `phase_index = 0`, `current_phase_title = ""`, `last_summary = ""`, `iteration_count = 0`, `status = "running"`.
 
-Acquire an advisory lock on `.conduct/state-<plan-basename>.json.lock` before any write (see `lock.py` shipped with this skill).
+Acquire an advisory lock on `.conduct/state-<plan-id>.json.lock` before any write (see `lock.py` shipped with this skill).
 
 ### 5. Phase parsing
 
@@ -163,6 +163,7 @@ Each subagent returns a final fenced ` ```json ` block. Parse rules:
 - **Anchor on the LAST fenced `json` block** in the output, not the first. The plan or prompt body may contain schema examples; only the terminal block is the report.
 - Validate via `schema.parse_report(text, expected_role)` — this performs the last-block extraction, JSON parse, and role-specific schema check. Required top-level keys: `role`, `phase_position`, `phase_label`, `iteration` for impl/test roles, plus role-specific fields (`findings` for reviewer; `files_changed`/`summary` for implementer; `test_files_added`/`test_commands`/`coverage_summary` for test-writer). For implementer and test-writer the `flags` object is also validated by key: implementer must emit `blocked` (bool), `test_contract_mismatch` (bool), `needs_test_coverage` (list); test-writer must emit `blocked` (bool) and `needs_impl_clarification` (string or null). Reviewer does not emit `flags`. Extra keys (top-level or inside `flags`) are allowed so prompts can evolve without breaking older conductors.
 - If `parse_report` raises `SchemaError` → set `state.status = "schema_error"`, record which subagent failed, the error message, and the raw output tail in state, handback to the user. Do NOT respawn. A clean-context respawn cannot consume "your last output was malformed" because the fresh subagent has no memory of the prior attempt.
+- If a worker report sets `flags.blocked = true`, or a test-writer reports `needs_impl_clarification`, persist `state.status = "blocked"` with the worker's explanation and hand back immediately. Do not run tests or commit staged changes after an explicit worker blocker.
 
 ### Step 5 — Run tests
 
@@ -173,7 +174,7 @@ Resolve the test command in order:
 3. Repo default: `package.json` `scripts.test`, `pyproject.toml` `[tool.pytest.ini_options]`, or `Makefile` `test` target.
 4. None available → emit warning, skip tests, set `state.last_summary` with the skip flag, proceed directly to Step 8 (commit boundary).
 
-Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The wall clock is enforced by Python's `subprocess.run(timeout=...)` so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
+Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The runner starts the test command in its own subprocess session and, on timeout, terminates the full process group so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
 
 On non-zero exit → Step 6. On zero exit → Step 7.
 
@@ -182,7 +183,7 @@ On non-zero exit → Step 6. On zero exit → Step 7.
 No classifier. On any failure (test failure OR pre-commit hook failure at the boundary commit in Step 8):
 
 - Increment `state.iteration_count`. Persist state immediately (crash recovery).
-- If `iteration_count > N`: set `state.status = "blocked"`, handback with message `Phase <label> stalled after <N> iterations; see .conduct/state-<plan>.json for diff and failure history.` Do not auto-advance.
+- If `iteration_count > N`: set `state.status = "blocked"`, handback with message `Phase <label> stalled after <N> iterations; see .conduct/state-<plan-id>.json for diff and failure history.` Do not auto-advance.
 - Else **reset the index before respawn**: capture `git diff --cached` into `{{PRIOR_DIFF}}`, then run `git reset` (mixed, no `--hard`) to clear the staging area. The respawned implementer starts from a clean index with the prior diff visible only inside its prompt — this prevents stale staged content from a failed attempt silently mixing into the next iteration.
 - Respawn the implementer with `{{ITERATION}}` = new count, `{{PRIOR_DIFF}}` = the captured diff, `{{TEST_FAILURES}}` = full runner output (or hook output, if the failure came from the boundary commit).
 - Exception: if the previous implementer report set `flags.test_contract_mismatch: true`, respawn the **test-writer** instead on this iteration, same inputs. Reset the flag handling for the iteration after that (respawn implementer again unless the next report flips the flag again).
@@ -230,7 +231,7 @@ No keyword heuristic watches for "proceed" — the user copies the printed comma
 
 ## State File
 
-Path: `<repo-root>/.conduct/state-<plan-basename>.json`. `.conduct/` is git-ignored (Phase 5).
+Path: `<repo-root>/.conduct/state-<plan-id>.json`, where `plan-id` is the basename plus a short hash of the repo-relative plan path. `.conduct/` is git-ignored (Phase 5).
 
 Schema:
 
@@ -247,7 +248,7 @@ Schema:
   ],
   "last_summary": "...",
   "iteration_count": 0,
-  "status": "awaiting_user | running | blocked | schema_error | complete",
+  "status": "awaiting_user | running | paused | blocked | schema_error | complete",
   "blocker": null
 }
 ```

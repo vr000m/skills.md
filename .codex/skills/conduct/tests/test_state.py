@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from lock import STALE_SECONDS, LockError, StateLock
+from conduct.lock import STALE_SECONDS, LockError, StateLock, main as lock_main
 
 
 STATE_REQUIRED_KEYS = {
@@ -96,7 +96,7 @@ def test_old_flock_lockfile_does_not_split_lock_ownership(tmp_path: Path):
 
 
 def test_stale_fallback_lockdir_breaks_when_owner_dead(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("lock.fcntl", None)
+    monkeypatch.setattr("conduct.lock.fcntl", None)
     lockfile = tmp_path / "state.json.lock"
     lockdir = lockfile.with_suffix(lockfile.suffix + ".lockdir")
     lockdir.mkdir()
@@ -105,3 +105,7 @@ def test_stale_fallback_lockdir_breaks_when_owner_dead(tmp_path: Path, monkeypat
     os.utime(lockdir, (old, old))
     with StateLock(lockfile):
         pass
+
+
+def test_lock_cli_rejects_release_action():
+    assert lock_main(["lock.py", "release", "state.json.lock"]) == 2

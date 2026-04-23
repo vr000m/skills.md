@@ -34,9 +34,10 @@ from typing import Callable, Optional
 
 import pytest
 
-from conductor import (
+from conduct.conductor import (
     ConductOptions,
     SpawnRequest,
+    _state_path,
     _repo_default_test_cmd,
     abort_run,
     conduct,
@@ -45,9 +46,9 @@ from conductor import (
     detect_lint_command,
     pause_phase,
 )
-from lock import StateLock
-from marker import compute_plan_hash, write_marker
-from runner import TestResult as _TestResult  # rename — pytest tries to collect any class named Test*
+from conduct.lock import StateLock
+from conduct.marker import compute_plan_hash, write_marker
+from conduct.runner import TestResult as _TestResult  # rename — pytest tries to collect any class named Test*
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +82,10 @@ def _scratch_plan(repo: Path, body: str) -> Path:
     plan.write_text(textwrap.dedent(body))
     write_marker(plan)
     return plan
+
+
+def _state_file(repo: Path, plan: Path) -> Path:
+    return _state_path(ConductOptions(plan_path=plan, repo_root=repo, spawn=lambda r: ""))
 
 
 PLAN_ONE_PHASE = """\
@@ -274,7 +279,7 @@ def test_happy_path_single_phase_commits_and_hands_back(repo):
 
     log = _git(["log", "--oneline"], repo).stdout
     assert "conduct: phase 1 — Add a file" in log
-    state = json.loads((repo / ".conduct" / "state-20260422-scratch.json").read_text())
+    state = json.loads(_state_file(repo, plan).read_text())
     assert state["completed_phases"][0]["tests"] == "passed"
     assert state["completed_phases"][0]["iterations"] == 0
 
@@ -304,6 +309,17 @@ def test_multi_phase_via_resume_advances_one_phase_at_a_time(repo):
     assert second.status == "awaiting_user"
     assert len(second.state["completed_phases"]) == 2
     assert [p["label"] for p in second.state["completed_phases"]] == ["1", "2"]
+
+
+def test_state_file_id_disambiguates_same_basename_plans(repo):
+    plan_a = _scratch_plan(repo, PLAN_ONE_PHASE)
+    other_dir = repo / "tmp"
+    other_dir.mkdir()
+    plan_b = other_dir / plan_a.name
+    plan_b.write_text(textwrap.dedent(PLAN_ONE_PHASE))
+    write_marker(plan_b)
+
+    assert _state_file(repo, plan_a) != _state_file(repo, plan_b)
 
 
 def test_existing_state_requires_explicit_resume(repo):
@@ -366,6 +382,68 @@ def test_assertion_failure_respawns_implementer_and_passes_on_iteration_1(repo):
     assert result.state["iteration_count"] == 1
     impl_calls = [c for c in spawner.calls if c.role == "implementer"]
     assert [c.iteration for c in impl_calls] == [0, 1]
+
+
+def test_blocked_implementer_report_stops_before_tests_or_commit(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+
+    def blocked_impl(req, r):
+        _stage(r, "src/a.py", "partial=1\n")
+        return _impl_report(
+            0,
+            ["src/a.py"],
+            blocked=True,
+            explanation="missing API contract",
+        )
+
+    spawner.script("implementer", 0, blocked_impl)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "blocked"
+    assert "missing API contract" in result.summary
+    assert runner.calls == []
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "conduct: phase 1" not in log
+
+
+def test_test_writer_clarification_blocks_before_commit(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+
+    def clarifying_test_writer(req, r):
+        payload = {
+            "role": "test-writer",
+            "phase_position": 0,
+            "phase_label": "1",
+            "iteration": 0,
+            "test_files_added": ["tests/test_a.py"],
+            "test_commands": ["true"],
+            "coverage_summary": "need clarification",
+            "flags": {"blocked": False, "needs_impl_clarification": "error path still unspecified"},
+        }
+        return f"```json\n{json.dumps(payload)}\n```"
+
+    spawner.script("test-writer", 0, clarifying_test_writer)
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "blocked"
+    assert "error path still unspecified" in result.summary
+    assert runner.calls == []
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "conduct: phase 1" not in log
 
 
 def test_test_contract_mismatch_routes_iteration_1_to_test_writer(repo):
@@ -534,7 +612,7 @@ def test_pause_phase_stashes_and_marks_state(repo):
     # Pre-create state so pause has something to mark.
     state_dir = repo / ".conduct"
     state_dir.mkdir()
-    state_file = state_dir / "state-20260422-scratch.json"
+    state_file = _state_file(repo, plan)
     state_file.write_text(
         json.dumps({"plan_path": str(plan), "current_phase_title": "Add a file"})
     )
@@ -553,7 +631,7 @@ def test_abort_run_deletes_state_without_touching_tree(repo):
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
     state_dir = repo / ".conduct"
     state_dir.mkdir()
-    state_file = state_dir / "state-20260422-scratch.json"
+    state_file = _state_file(repo, plan)
     state_file.write_text("{}")
     (repo / "scratch.txt").write_text("wip\n")
 
@@ -572,7 +650,7 @@ def test_abort_run_refuses_when_state_lock_held(repo):
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
     state_dir = repo / ".conduct"
     state_dir.mkdir()
-    state_file = state_dir / "state-20260422-scratch.json"
+    state_file = _state_file(repo, plan)
     state_file.write_text(
         json.dumps(
             {
@@ -590,6 +668,31 @@ def test_abort_run_refuses_when_state_lock_held(repo):
         assert state_file.exists()
     finally:
         lock.release()
+
+
+def test_abort_run_does_not_delete_other_plan_state_with_same_basename(repo):
+    plan_a = _scratch_plan(repo, PLAN_ONE_PHASE)
+    other_dir = repo / "tmp"
+    other_dir.mkdir()
+    plan_b = other_dir / plan_a.name
+    plan_b.write_text(textwrap.dedent(PLAN_ONE_PHASE))
+    write_marker(plan_b)
+
+    state_a = _state_file(repo, plan_a)
+    state_a.parent.mkdir(parents=True, exist_ok=True)
+    state_a.write_text(
+        json.dumps(
+            {
+                "plan_path": str(plan_a),
+                "plan_content_hash": compute_plan_hash(plan_a),
+                "current_phase_title": "Add a file",
+            }
+        )
+    )
+
+    result = abort_run(ConductOptions(plan_path=plan_b, repo_root=repo, spawn=lambda r: ""))
+    assert result.status == "aborted"
+    assert state_a.exists()
 
 
 def test_rogue_commit_detection_does_not_stack_a_second_commit(repo):
@@ -716,7 +819,7 @@ def test_resume_rejects_state_from_different_plan_path(repo):
 
     state_dir = repo / ".conduct"
     state_dir.mkdir()
-    (state_dir / "state-20260422-scratch.json").write_text(
+    _state_file(repo, plan).write_text(
         json.dumps(
             {
                 "plan_path": str(other_plan),
@@ -869,7 +972,7 @@ def test_resume_base_sha_is_cleared_after_phase_commits(repo):
 
     state_dir = repo / ".conduct"
     state_dir.mkdir()
-    (state_dir / "state-20260422-scratch.json").write_text(
+    _state_file(repo, plan).write_text(
         json.dumps(
             {
                 "plan_path": str(plan),
@@ -915,6 +1018,38 @@ def test_resume_base_sha_is_cleared_after_phase_commits(repo):
     assert completed[1].get("rogue_commit_sha") is None
 
 
+def test_hook_retry_respects_blocked_respawn_report(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    hooks_dir = repo / ".git" / "hooks"
+    hook = hooks_dir / "pre-commit"
+    hook.write_text("#!/bin/sh\necho 'hook says no' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    spawner = StubSpawner(repo)
+
+    def initial_impl(req, r):
+        _stage(r, "src/a.py", "x=1\n")
+        return _impl_report(0, ["src/a.py"])
+
+    def blocked_retry(req, r):
+        assert "hook says no" in req.test_failures
+        _stage(r, "src/a.py", "x=2\n")
+        return _impl_report(1, ["src/a.py"], blocked=True, explanation="manual migration required")
+
+    spawner.script("implementer", 0, initial_impl)
+    spawner.script("implementer", 1, blocked_retry)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "blocked"
+    assert "manual migration required" in result.summary
+    log = _git(["log", "--oneline"], repo).stdout
+    assert "conduct: phase 1" not in log
+
+
 # ---------------------------------------------------------------------------
 # C3: default_lint_check probe (SKILL.md Preflight Step 3)
 # ---------------------------------------------------------------------------
@@ -926,7 +1061,7 @@ def _which_stub(present: set[str]):
 
 
 def test_detect_lint_command_returns_none_when_nothing_available(tmp_path, monkeypatch):
-    monkeypatch.setattr("conductor.shutil.which", _which_stub(set()))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub(set()))
     assert detect_lint_command(tmp_path) is None
 
 
@@ -935,7 +1070,7 @@ def test_detect_lint_command_prefers_pre_commit(tmp_path, monkeypatch):
     (tmp_path / "Makefile").write_text("lint:\n\tpython -m flake8\n")
     (tmp_path / "package.json").write_text('{"scripts": {"lint": "eslint ."}}\n')
     monkeypatch.setattr(
-        "conductor.shutil.which", _which_stub({"pre-commit", "make", "npm", "ruff"})
+        "conduct.conductor.shutil.which", _which_stub({"pre-commit", "make", "npm", "ruff"})
     )
     assert detect_lint_command(tmp_path) == ["pre-commit", "run", "--all-files"]
 
@@ -943,19 +1078,19 @@ def test_detect_lint_command_prefers_pre_commit(tmp_path, monkeypatch):
 def test_detect_lint_command_skips_pre_commit_when_binary_missing(tmp_path, monkeypatch):
     (tmp_path / ".pre-commit-config.yaml").write_text("repos: []\n")
     (tmp_path / "Makefile").write_text("lint:\n\tflake8\n")
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"make"}))
     assert detect_lint_command(tmp_path) == ["make", "lint"]
 
 
 def test_detect_lint_command_falls_through_to_npm_run_lint(tmp_path, monkeypatch):
     (tmp_path / "package.json").write_text('{"scripts": {"lint": "eslint ."}}\n')
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"npm"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"npm"}))
     assert detect_lint_command(tmp_path) == ["npm", "run", "lint"]
 
 
 def test_detect_lint_command_falls_through_to_ruff_for_python_repo(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"ruff"}))
     assert detect_lint_command(tmp_path) == ["ruff", "check", "."]
 
 
@@ -963,17 +1098,17 @@ def test_detect_lint_command_falls_through_to_ruff_for_nested_python_repo(tmp_pa
     nested = tmp_path / ".codex" / "skills" / "conduct"
     nested.mkdir(parents=True)
     (nested / "conductor.py").write_text("print('x')\n")
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"ruff"}))
     assert detect_lint_command(tmp_path) == ["ruff", "check", "."]
 
 
 def test_detect_lint_command_skips_ruff_when_no_python_signal(tmp_path, monkeypatch):
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"ruff"}))
     assert detect_lint_command(tmp_path) is None
 
 
 def test_default_lint_check_returns_none_when_no_tool_available(tmp_path, monkeypatch):
-    monkeypatch.setattr("conductor.shutil.which", _which_stub(set()))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub(set()))
     assert default_lint_check(tmp_path) is None
 
 
@@ -987,7 +1122,7 @@ def test_default_lint_check_runs_detected_command_and_reports_failure(tmp_path, 
     (tmp_path / "Makefile").write_text(
         "lint:\n\t@echo 'fake lint failure: line too long'; exit 1\n"
     )
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"make"}))
     diag = default_lint_check(tmp_path)
     assert diag is not None
     assert "make lint" in diag
@@ -998,7 +1133,7 @@ def test_default_lint_check_returns_none_on_passing_check(tmp_path, monkeypatch)
     if shutil.which("make") is None:
         pytest.skip("make not available")
     (tmp_path / "Makefile").write_text("lint:\n\t@true\n")
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"make"}))
     assert default_lint_check(tmp_path) is None
 
 
@@ -1012,7 +1147,7 @@ def test_run_preflight_invokes_default_lint_check_when_no_override(repo, monkeyp
     (repo / "Makefile").write_text(
         "lint:\n\t@echo 'preflight diagnostic seeded'; exit 1\n"
     )
-    monkeypatch.setattr("conductor.shutil.which", _which_stub({"make"}))
+    monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"make"}))
     spawner = StubSpawner(repo)
     runner = StubTestRunner()
 
@@ -1065,7 +1200,7 @@ def test_state_file_includes_documented_contract_keys(repo):
     )
     assert result.status == "awaiting_user"
 
-    state_path = repo / ".conduct" / f"state-{plan.stem}.json"
+    state_path = _state_file(repo, plan)
     state = json.loads(state_path.read_text())
     assert {
         "plan_path",

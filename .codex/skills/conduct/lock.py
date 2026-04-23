@@ -12,12 +12,11 @@ unlinked by age alone.
 CLI usage:
 
     python3 lock.py acquire <lockfile>   # exit 0 on acquire; prints pid
-    python3 lock.py release <lockfile>   # exit 0 on release
     python3 lock.py status  <lockfile>   # exit 0 if free, 1 if held
 
 Python usage::
 
-    from lock import StateLock
+    from conduct.lock import StateLock
     with StateLock(path) as lock:
         # ... exclusive section ...
 """
@@ -196,34 +195,17 @@ def _cli_acquire(path: str) -> int:
     return 0
 
 
-def _cli_release(path: str) -> int:
-    lock = StateLock(path)
-    lock._fd = None  # release-only path does not reacquire
-    lock._lockdir = None
-    lock_path = Path(path)
-    lockdir = lock_path.with_suffix(lock_path.suffix + ".lockdir")
-    if lockdir.exists():
-        for child in lockdir.iterdir():
-            child.unlink()
-        lockdir.rmdir()
-    elif lock_path.exists():
-        lock_path.unlink()
-    return 0
-
-
 def _cli_status(path: str) -> int:
     return 1 if lock_is_held(path) else 0
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 3 or argv[1] not in {"acquire", "release", "status"}:
-        sys.stderr.write("usage: lock.py {acquire|release|status} <lockfile>\n")
+    if len(argv) != 3 or argv[1] not in {"acquire", "status"}:
+        sys.stderr.write("usage: lock.py {acquire|status} <lockfile>\n")
         return 2
     action, path = argv[1], argv[2]
     if action == "acquire":
         return _cli_acquire(path)
-    if action == "release":
-        return _cli_release(path)
     return _cli_status(path)
 
 

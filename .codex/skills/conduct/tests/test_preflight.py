@@ -22,13 +22,13 @@ from pathlib import Path
 
 import pytest
 
-from marker import (
+from conduct.marker import (
     compute_plan_hash,
     marker_is_stale,
     read_marker,
     write_marker,
 )
-from parser import files_overlap, parse_phases
+from conduct.parser import files_overlap, parse_phases
 
 
 def _scratch_plan(tmp_path: Path, body: str) -> Path:
