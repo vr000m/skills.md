@@ -10,7 +10,8 @@ fi
 
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
-MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+MANAGED_SKILLS="${MANAGED_SKILLS:-conduct content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+CLAUDE_ONLY_SKILLS="${CLAUDE_ONLY_SKILLS:-}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -36,6 +37,22 @@ for skill in "${managed_skills[@]}"; do
 		echo "drift: .claude/skills/$skill missing from repo but exists globally"
 		CLAUDE_DIFF=1
 	elif ! diff -ru --exclude='content-guidelines.md' "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" "$ROOT_DIR/.claude/skills/$skill" >/dev/null; then
+		echo "drift: .claude/skills/$skill differs from global authority"
+		CLAUDE_DIFF=1
+	fi
+done
+
+claude_only_skills=()
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
+fi
+for skill in "${claude_only_skills[@]}"; do
+	if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
+		echo "skip: .claude/skills/$skill global dir not yet bootstrapped (run promote-skills or bootstrap-skills)"
+	elif [[ ! -d "$ROOT_DIR/.claude/skills/$skill" ]]; then
+		echo "drift: .claude/skills/$skill missing from repo but exists globally"
+		CLAUDE_DIFF=1
+	elif ! diff -ru "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" "$ROOT_DIR/.claude/skills/$skill" >/dev/null; then
 		echo "drift: .claude/skills/$skill differs from global authority"
 		CLAUDE_DIFF=1
 	fi

@@ -57,7 +57,7 @@ Every plan must include these sections (see template.md for full format):
 1. **Header** - Status, assignee, priority, branch, dates, objective
 2. **Context** - Background, why this work is needed
 3. **Requirements** - Specific requirements and constraints
-4. **Implementation Checklist** - Phased breakdown with checkboxes
+4. **Implementation Checklist** - Phased breakdown with checkboxes. Each phase should include a contract block directly under the heading with `**Impl files:**`, `**Test files:**`, `**Test command:**` (in backticks), and optionally `**Validation cmd:**` (in backticks, runs after tests pass, failure hands back to user). `/conduct` reads these to decide spawn strategy and run tests/validation. Phases may also include a `**Findings:**` subsection for durable notes such as diagnostic query results (with filters explicit), decision rationale, and accepted-behaviour outcomes, but do not rely on `/conduct` subagents to mutate the reviewed plan body during the run. Omit all slots only when the phase is not `/conduct`-driven; if every phase omits them, `/conduct` emits a degraded-mode warning.
 5. **Technical Specifications** - Files to modify, interfaces, architecture decisions, integration seams
 6. **Testing Notes** - Test approach and results
 7. **Issues & Solutions** - Problems encountered and how resolved
@@ -84,7 +84,7 @@ Keep it short, concrete, and specific. If a plan references external standards, 
 3. Define phases and acceptance criteria
 4. Identify files to modify, potential risks, and any Review Focus items that should be written into the plan
 5. Run `/review-plan` to audit for gaps, undocumented assumptions, missing constraints, and Review Focus coverage before coding starts
-6. Address review findings, then proceed to implementation (or `/fan-out` for parallel tasks)
+6. Address review findings, then proceed to implementation. For a linear multi-phase plan, run `/conduct <plan>` to walk phases with per-phase clean-context subagents (fill the `**Impl files:**`, `**Test files:**`, and `**Test command:**` slots so the conductor can decide spawn strategy and run tests). Use `/fan-out` when phases are independent enough to parallelise.
 
 ### During Implementation
 1. Update checkboxes as tasks complete

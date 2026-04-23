@@ -1,3 +1,6 @@
 .env
 **/.DS_Store
 .deep-review/
+.conduct/
+__pycache__/
+.pytest_cache/

@@ -10,7 +10,7 @@ Spawn a fresh-context subagent to audit a development plan before implementation
 
 ## Why This Exists
 
-Plans encode assumptions. Some are stated, most aren't. The author knows what they meant; a fresh reader sees only what's written. This skill exploits that gap: an independent agent reads the plan cold, explores the codebase to verify claims, and surfaces what's missing, ambiguous, or risky. Findings go back to the user for discussion — the plan is never modified automatically.
+Plans encode assumptions. Some are stated, most aren't. The author knows what they meant; a fresh reader sees only what's written. This skill exploits that gap: an independent agent reads the plan cold, explores the codebase to verify claims, and surfaces what's missing, ambiguous, or risky. Findings go back to the user for discussion — the plan *body* is never modified automatically. The sole exception is a trailing **review marker footer** appended after the user explicitly accepts or waives findings, consumed by `/conduct` as a readiness signal.
 
 ## Delegation Pattern
 
@@ -139,16 +139,45 @@ If the review is clean (no critical or important findings), say so concisely and
 
 ### Step 4: Discussion
 
-Do NOT modify the plan automatically. The findings are a starting point for conversation:
+Do NOT modify the plan *body* automatically. The findings are a starting point for conversation:
 - The user may accept some findings and reject others
 - Some findings may need clarification or deeper investigation
 - Accepted findings should be incorporated via `/dev-plan update`
 
 Only after the user has reviewed and addressed the findings (or explicitly decided to proceed) should implementation begin.
 
+### Step 5: Write the Review Marker
+
+After findings have been presented and discussed, ask the user one question:
+
+> Are findings addressed? (`yes` / `waive` / `no`)
+
+- **`yes`** — user has incorporated all findings they plan to address. Write the marker.
+- **`waive`** — user has read the findings and chosen not to act on them. Write the marker anyway.
+- **`no`** — exit without writing. User will re-run `/review-plan` later.
+
+The **review marker** is a single HTML-comment line appended as the final line of the plan file:
+
+```
+<!-- reviewed: YYYY-MM-DD @ <hash> -->
+```
+
+- `YYYY-MM-DD` — today's date.
+- `<hash>` — 40-character SHA-1 from `git hash-object <tmpfile>`, where `<tmpfile>` is the plan with its final line removed **only if** that final line already matches the marker regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. Otherwise the plan is hashed as-is. This makes re-review idempotent: replacing an existing marker produces the same hash as a plan without one.
+
+Procedure:
+
+1. Read the plan file.
+2. If the final non-empty line matches the marker regex, strip it (in memory) to produce `<tmpfile>`; else use the plan as-is.
+3. Compute `git hash-object <tmpfile>`.
+4. Compose the new marker line with today's date and the computed hash.
+5. Write the plan back: original content (with any prior marker line removed) + the new marker as the final line. Ensure a single trailing newline.
+
+Only the final line is ever treated as a marker. Marker-shaped text inside plan prose or code fences is ignored by both the strip step and the `/conduct` preflight check — this matters when a plan documents the marker format itself.
+
 ## Constraints
 
-- Never modify the plan file directly — findings drive a conversation, not automatic edits
+- Do not modify the plan *body* automatically — findings drive a conversation, not edits. The trailing review marker footer is the only permitted automated write, and only after explicit user acceptance (`yes`/`waive`).
 - The subagent must not receive parent conversation context — fresh eyes are the entire value
 - Use model `opus` for the subagent — the quality of analysis justifies the cost
 - This skill blocks — the user waits for the review before proceeding

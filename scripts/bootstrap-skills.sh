@@ -10,7 +10,8 @@ fi
 
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
-MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+MANAGED_SKILLS="${MANAGED_SKILLS:-conduct content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+CLAUDE_ONLY_SKILLS="${CLAUDE_ONLY_SKILLS:-}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -72,6 +73,25 @@ for skill in "${managed_skills[@]}"; do
 		echo "skip: $GLOBAL_CLAUDE_SKILLS_DIR/$skill already has content (use --force to overwrite)"
 	else
 		rsync -a --delete "$ROOT_DIR/.claude/skills/$skill/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+	fi
+done
+
+claude_only_skills=()
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
+fi
+for skill in "${claude_only_skills[@]}"; do
+	src="$ROOT_DIR/.claude/skills/$skill"
+	if [[ ! -d "$src" ]]; then
+		echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
+		continue
+	fi
+	mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
+	if [[ "$force_overwrite" -eq 0 && -n "$(find "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+		echo "skip: $GLOBAL_CLAUDE_SKILLS_DIR/$skill already has content (use --force to overwrite)"
+	else
+		rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+		echo "Installed Claude-only skill: $skill"
 	fi
 done
 

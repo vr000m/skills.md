@@ -1,0 +1,211 @@
+"""Tests for plan parsing.
+
+Covers the phase heading regex (colons in title, parenthesised annotations,
+non-contiguous numbering, non-numeric labels, already-completed phases) and
+the Test command regex (backticks, multiple matches, malformed).
+"""
+
+from __future__ import annotations
+
+import textwrap
+
+from parser import (
+    PHASE_HEADING_RE,
+    TEST_COMMAND_RE,
+    files_overlap,
+    parse_phases,
+)
+
+
+def test_phase_heading_plain():
+    m = PHASE_HEADING_RE.match("### Phase 1: Bootstrap")
+    assert m and m.group(1) == "1" and m.group(2) == "Bootstrap"
+
+
+def test_phase_heading_colon_in_title():
+    m = PHASE_HEADING_RE.match("### Phase 2: review-plan: marker footer")
+    assert m
+    assert m.group(1) == "2"
+    assert m.group(2) == "review-plan: marker footer"
+
+
+def test_phase_heading_parenthesised_annotation_stripped():
+    m = PHASE_HEADING_RE.match("### Phase 3a: Scaffolding (safe to parallelise)")
+    assert m
+    assert m.group(1) == "3a"
+    assert m.group(2) == "Scaffolding"
+    assert m.group(3) == "(safe to parallelise)"
+
+
+def test_phase_heading_non_numeric_label():
+    m = PHASE_HEADING_RE.match("### Phase alpha: Research spike")
+    assert m and m.group(1) == "alpha"
+
+
+def test_phase_heading_rejects_non_heading():
+    assert PHASE_HEADING_RE.match("#### Phase 1: too deep") is None
+    assert PHASE_HEADING_RE.match("### phase 1: lowercase") is None
+
+
+def test_test_command_regex_matches_backticks():
+    m = TEST_COMMAND_RE.match("**Test command:** `pytest -q`")
+    assert m and m.group(1) == "pytest -q"
+
+
+def test_test_command_regex_rejects_unbacked():
+    assert TEST_COMMAND_RE.match("**Test command:** pytest -q") is None
+
+
+def test_parse_phases_picks_phases_in_order_with_slots():
+    plan = textwrap.dedent(
+        """\
+        # Some Plan
+
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Impl files:** src/a.py, src/b.py
+        **Test files:** tests/test_a.py
+        **Test command:** `pytest tests/test_a.py -v`
+
+        - [x] done
+        - [x] also done
+
+        ### Phase 2: Second (optional)
+
+        **Impl files:** src/c.py
+        **Test files:** src/c.py
+        **Test command:** `pytest tests/test_c.py`
+
+        - [ ] todo
+
+        ### Phase 3a: Third with colon: tail
+
+        - [ ] todo
+
+        ## Something Else
+        """
+    )
+    phases = parse_phases(plan)
+    labels = [(p.position, p.label, p.title) for p in phases]
+    assert labels == [
+        (0, "1", "First"),
+        (1, "2", "Second"),
+        (2, "3a", "Third with colon: tail"),
+    ]
+    assert phases[0].is_complete is True
+    assert phases[1].is_complete is False
+    assert phases[0].impl_files == ["src/a.py", "src/b.py"]
+    assert phases[0].test_files == ["tests/test_a.py"]
+    assert phases[0].test_command == "pytest tests/test_a.py -v"
+    assert phases[1].test_command == "pytest tests/test_c.py"
+    # Missing slots → None
+    assert phases[2].impl_files is None
+    assert phases[2].test_files is None
+    assert phases[2].test_command is None
+
+
+def test_parse_phases_multiple_test_commands_picks_first():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: Duplicates
+
+        **Test command:** `first`
+        **Test command:** `second`
+
+        - [ ] x
+        """
+    )
+    phases = parse_phases(plan)
+    assert phases[0].test_command == "first"
+
+
+def test_parse_phases_no_checklist_header_returns_empty():
+    plan = "# No checklist here\n"
+    assert parse_phases(plan) == []
+
+
+def test_parse_phases_non_phase_h3_inside_body_does_not_end_phase():
+    # Regression: a non-Phase `### Notes` subheading inside a phase body used
+    # to silently reset current=None, dropping the rest of the phase. Now it
+    # is absorbed as body content and the phase's checkboxes + slots remain
+    # reachable.
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: With subheading
+
+        **Impl files:** src/a.py
+        **Test command:** `pytest`
+
+        ### Notes
+
+        Some prose.
+
+        - [x] done one
+        - [x] done two
+
+        ## Next Section
+        """
+    )
+    phases = parse_phases(plan)
+    assert len(phases) == 1
+    assert phases[0].impl_files == ["src/a.py"]
+    assert phases[0].test_command == "pytest"
+    assert phases[0].is_complete is True
+
+
+def test_parse_phases_h2_still_ends_phase_scope():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: Bounded
+
+        - [ ] inside phase
+
+        ## Technical Specifications
+
+        - [ ] outside phase, must not count toward phase 1
+        """
+    )
+    phases = parse_phases(plan)
+    assert len(phases) == 1
+    assert phases[0].is_complete is False
+    # Only the in-phase checkbox contributes.
+    assert sum(1 for line in phases[0].body_lines if "inside phase" in line) == 1
+    assert not any("outside phase" in line for line in phases[0].body_lines)
+
+
+def test_files_overlap_detects_same_path():
+    assert files_overlap(["src/a.py"], ["src/a.py"]) is True
+
+
+def test_files_overlap_detects_subpath():
+    assert files_overlap(["src/"], ["src/a.py"]) is True
+    assert files_overlap(["src/a.py"], ["src"]) is True
+
+
+def test_files_overlap_disjoint():
+    assert files_overlap(["src/a.py"], ["tests/test_a.py"]) is False
+
+
+def test_files_overlap_missing_slot_is_false():
+    assert files_overlap(None, ["tests/test_a.py"]) is False
+    assert files_overlap(["src/a.py"], None) is False
+    assert files_overlap([], ["x"]) is False
+
+
+def test_files_overlap_globs_are_conservative():
+    # Cannot prove disjointness against glob entries → overlap True so
+    # caller falls back to sequential.
+    assert files_overlap(["src/*.py"], ["tests/test_a.py"]) is True
+    assert files_overlap(["src/a.py"], ["tests/**/*.py"]) is True
+    assert files_overlap(["src/[ab].py"], ["docs/x.md"]) is True
+    assert files_overlap(["src/?.py"], ["docs/x.md"]) is True
+    # Same glob on both sides → still overlap (was the silent-bug case).
+    assert files_overlap(["src/*.py"], ["src/*.py"]) is True

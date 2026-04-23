@@ -15,6 +15,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 | rfc-finder | Yes | Yes | Find and link to IETF RFCs and related drafts |
 | spec-compliance | Yes | Yes | Check code against RFC/W3C/WHATWG requirements |
 | update-docs | Yes | Yes | Audit and update stale docs against branch diffs |
+| conduct | Yes | Yes | Walk a reviewed dev plan phase by phase via harness-native clean-context subagents |
 
 ## Setup
 
@@ -33,7 +34,8 @@ cp .env.example .env
 3. (Optional) restrict managed skills in `.env`:
 
 ```bash
-MANAGED_SKILLS="content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs"
+MANAGED_SKILLS="conduct content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs"
+CLAUDE_ONLY_SKILLS=""
 ```
 
 For one-off runs, prefer a command-scoped override instead of editing `.env`:
@@ -42,6 +44,8 @@ For one-off runs, prefer a command-scoped override instead of editing `.env`:
 MANAGED_SKILLS="rfc-finder" just bootstrap-skills
 MANAGED_SKILLS="rfc-finder" just promote-skills
 ```
+
+`MANAGED_SKILLS` lists skills kept in lockstep between `.claude/` and `.codex/` mirrors. `CLAUDE_ONLY_SKILLS` remains available for skills that intentionally live only under `.claude/` and are promoted exclusively to `~/.claude/skills/` — no `.codex` read or write. `conduct` now ships in both mirrors and keeps the same review-marker, phase-slot, state-file, report-schema, and handback contracts across harnesses while using harness-native worker orchestration.
 
 `bootstrap-skills` seeds missing global skill dirs without overwriting existing content unless `--force` is used. `promote-skills` intentionally overwrites the selected managed skills and also copies repo `.claude/CLAUDE.md` and `.codex/AGENTS.md` to the global paths.
 
