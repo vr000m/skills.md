@@ -115,8 +115,9 @@ From the phase block, extract:
 - `**Impl files:**` — comma-separated paths, globs allowed.
 - `**Test files:**` — comma-separated paths, globs allowed.
 - `` **Test command:** `<cmd>` `` — parsed with `^\*\*Test command:\*\*\s+\x60([^\x60]+)\x60\s*$`; first match wins; additional matches emit a warning.
+- `` **Validation cmd:** `<cmd>` `` — optional. Runs after tests pass, before the boundary commit. Same shell-trust boundary as `Test command:`. Failure triggers handback (status `awaiting_user`), NOT the fix loop — validation typically exercises live-data or external-service behaviour an implementer cannot auto-repair. See Step 5b below.
 
-Any slot may be absent; see Fallbacks below.
+Any slot may be absent; see Fallbacks below. If an entire run's unfinished phases declare zero slots, the conductor emits a one-shot warning on the first handback (degraded-mode notice: "fill slots in the plan to enable parallel spawn and real test runs").
 
 ### Step 2 — Parallel vs sequential decision
 
@@ -164,7 +165,16 @@ Resolve the test command in order:
 
 Run the resolved command via `runner.run_tests(cmd, timeout=<secs>)` (`--test-timeout`, default 300). The wall clock is enforced by Python's `subprocess.run(timeout=...)` so behaviour is identical on Linux and macOS without depending on GNU coreutils `timeout`. On timeout the runner kills the process group, sets `timed_out = True`, and the conductor treats the result as a fix-loop failure with the killed-by-timeout note appended to the captured output.
 
-On non-zero exit → Step 6. On zero exit → Step 7.
+On non-zero exit → Step 6. On zero exit → Step 5b (if a validation command is present), else Step 7.
+
+### Step 5b — Optional validation command
+
+If the phase declares a `**Validation cmd:**` slot, run it via the same `runner.run_tests` subprocess wrapper after tests pass. Semantics differ from Step 5 in two ways:
+
+1. **No fix loop on failure.** A non-zero exit or timeout sets `state.status = "awaiting_user"` with `state.blocker = "Phase <label> validation failed"`, persists the last 2000 bytes of output as the diagnostic, and hands back. The user inspects the output and decides whether to patch the plan, re-invoke with `--resume`, or abort. A failing validation typically means the live-data or external-service behaviour being exercised cannot be fixed by respawning the implementer (e.g. a reprocess-and-diff check against a real database).
+2. **No subagent spawn.** Validation is a direct subprocess, not an Agent call. It shares the `Test command:` trust boundary — the plan author is authorising what gets executed.
+
+On zero exit, append `"validation passed"` to the phase warnings and continue to Step 7.
 
 ### Step 6 — Fix loop (bounded at N = `--max-iterations`, default 3)
 
@@ -184,10 +194,11 @@ Trigger conditions: staged diff > 200 lines, OR > 3 files touched, OR phase tagg
 
 After tests pass (or were skipped with warning):
 
-1. **Rogue-commit check.** Compare `git rev-parse HEAD` to the phase-start baseline: `state.resume_base_sha` if this run started from `--resume`, otherwise `state.base_sha` (for phase 1) or the last completed phase's `commit_sha`. If HEAD advanced beyond the baseline _during this phase's subagent work_, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase summary, set `state.status = "awaiting_user"` with a warning, handback. (User commits made during a previous handback are absorbed into `resume_base_sha` at preflight, so they do not trip this check.)
-2. Otherwise run `git commit -m "conduct: phase <label> — <phase title>"`. Commit author = current git user (no impersonation).
-3. If the pre-commit hook fails, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`.
-4. On success, record the new `HEAD` SHA in `state.completed_phases[*].commit_sha`.
+1. **Rogue-commit check.** Compare `git rev-parse HEAD` to the phase-start baseline: `state.resume_base_sha` if this run started from `--resume`, otherwise `state.base_sha` (for phase 1) or the last completed phase's `commit_sha` (walking back past any `commit_sha: null` entries — those are rogue-commit records, not real baselines). If HEAD advanced beyond the baseline _during this phase's subagent work_, a subagent committed despite the prompt directive. Do NOT stack another commit. Record `rogue_commit_sha` in the phase entry, set `commit_sha: null`, set `state.status = "awaiting_user"` with a warning, handback. (User commits made during a previous handback are absorbed into `resume_base_sha` at preflight, so they do not trip this check.)
+2. **No-op branch.** If `git diff --cached` is empty (the phase resolved to a diagnostic-only or accepted-behaviour outcome with no code change), skip the commit: record the phase entry with `commit_sha` = current `HEAD` (unchanged), add `no_op: true`, emit warning `no staged changes; skipping commit`, and proceed to Step 9. Do NOT use `--allow-empty`. The next phase's baseline falls through to this unchanged HEAD correctly.
+3. Otherwise run `git commit -m "conduct: phase <label> — <phase title>"`. Commit author = current git user (no impersonation).
+4. If the pre-commit hook fails, first check whether the hook modified files in-place (formatters like black, ruff --fix, prettier). If `git diff --name-only` is non-empty at this point, run `git add -u` and retry the commit **once** in-place with the same message. If the retry succeeds, append the warning `pre-commit hook modified files; re-staged and retrying` to the phase warnings and continue at step 5 as a normal success. If the retry also fails, or if the hook did not modify files, route the hook output back into Step 6 as a fix-loop iteration. Do NOT use `--no-verify`. The one-shot retry applies only to the formatter case — a hook that reports a genuine logic error (e.g. a test hook) will fail both attempts and correctly fall through to the fix loop.
+5. On success, record the new `HEAD` SHA in `state.completed_phases[*].commit_sha`. **This field is immutable once written.** If the user lands follow-up commits during handback (for example after `/deep-review`), the `--resume` preflight absorbs them into `resume_base_sha` for the rogue-commit check — it does NOT rewrite the previous phase's `commit_sha` to point at the follow-up. The phase entry records the conductor-authored boundary commit only; post-phase fixups live on the branch but are not re-attributed.
 
 ### Step 9 — Handback
 
@@ -233,6 +244,14 @@ Schema:
   "completed_phases": [
     { "index": 1, "label": "1", "title": "...", "commit_sha": "...", "tests": "passed", "iterations": 1 }
   ],
+  // Optional per-entry fields (written only when the condition fires):
+  //   "no_op": true              — Step 8 no-op branch; commit_sha is the unchanged HEAD.
+  //   "rogue_commit_sha": "..."  — subagent committed during phase; commit_sha is null,
+  //                                this records what HEAD advanced to.
+  //   "diagnostic_finding": "..."— narrative recorded when a phase resolves without code
+  //                                change; paired with no_op or a null commit_sha.
+  // "commit_sha" is immutable once written; it is NOT updated if the user amends or
+  // adds follow-up commits during handback.
   "last_summary": "...",
   "iteration_count": 0,
   "status": "awaiting_user | running | blocked | schema_error | complete",

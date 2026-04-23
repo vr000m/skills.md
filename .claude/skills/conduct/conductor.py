@@ -443,8 +443,9 @@ def _run_phase(
             )
 
         # Resolve test command. If absent and no override → skip-with-warning,
-        # go straight to commit.
-        warnings: list[str] = []
+        # go straight to commit. Drain any preflight-level warnings queued in
+        # state so the user sees them on the first handback only.
+        warnings: list[str] = list(state.pop("warnings_for_next_handback", []))
         if test_cmd is None:
             warnings.append("no test command; skipped tests")
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
@@ -455,6 +456,27 @@ def _run_phase(
         # Step 5: run tests.
         result = opts.test_runner(test_cmd, opts.test_timeout)
         if result.returncode == 0 and not result.timed_out:
+            # Step 5b: optional Validation cmd. Runs after tests pass, before
+            # the boundary commit. Failure = handback, NOT fix-loop — validation
+            # typically exercises live-data behaviour an implementer cannot
+            # auto-repair (reprocess a transcript, hit a staging API, etc.).
+            if phase.validation_command:
+                vresult = opts.test_runner(
+                    phase.validation_command, opts.test_timeout
+                )
+                if vresult.returncode != 0 or vresult.timed_out:
+                    state["status"] = "awaiting_user"
+                    state["blocker"] = (
+                        f"Phase {phase.label} validation failed"
+                    )
+                    _persist_state(opts, state)
+                    return ConductResult(
+                        status="awaiting_user",
+                        state=state,
+                        summary=state["blocker"],
+                        diagnostic=vresult.output[-2000:],
+                    )
+                warnings.append("validation passed")
             commit_outcome = _commit_phase(opts, state, phase, base_sha, warnings)
             if commit_outcome.status != "running":
                 return commit_outcome
@@ -550,6 +572,20 @@ def _commit_phase(
 
     commit_msg = f"conduct: phase {phase.label} — {phase.title}"
     proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
+
+    # Formatter-hook retry: if a pre-commit hook modified files (black, ruff
+    # --fix, prettier), the tree now has unstaged modifications. Re-stage those
+    # paths and retry the commit once in-place before routing to the fix loop.
+    # A logic error would fail again on retry; a formatter hook typically won't.
+    if proc.returncode != 0:
+        unstaged = _git(
+            ["diff", "--name-only"], opts.repo_root, check=False
+        ).stdout.strip()
+        if unstaged:
+            warnings.append("pre-commit hook modified files; re-staged and retrying")
+            _git(["add", "-u"], opts.repo_root, check=False)
+            proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
+
     if proc.returncode != 0:
         # Pre-commit hook failure → route into fix loop.
         state["iteration_count"] += 1
@@ -649,6 +685,22 @@ def conduct(opts: ConductOptions) -> ConductResult:
 
         plan_text = opts.plan_path.read_text()
         phases = [p for p in parse_phases(plan_text) if not p.is_complete]
+
+        # Plan-slot coverage warning (emitted at most once per run). If no
+        # unfinished phase declares any of Impl files: / Test files: /
+        # Test command: / Validation cmd:, the conductor will fall through to
+        # degraded mode (sequential spawn + test fallback) for every phase.
+        # That's a valid choice but often an oversight in the plan template.
+        if phases and not any(p.has_any_slot() for p in phases) \
+                and not state.get("_slot_warning_shown"):
+            state["_slot_warning_shown"] = True
+            state.setdefault("warnings_for_next_handback", []).append(
+                "no phase declares Impl files: / Test files: / Test command: / "
+                "Validation cmd: slots — running in degraded mode. "
+                "Fill these per-phase in the plan (see /dev-plan) to enable "
+                "parallel spawn and real test runs."
+            )
+
         # phase_index in state is the count of completed phases.
         idx = len(state.get("completed_phases", []))
         if idx >= len(phases):
