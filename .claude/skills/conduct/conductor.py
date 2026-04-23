@@ -336,13 +336,16 @@ def _phase_baseline(state: dict) -> str:
     """Baseline SHA for the rogue-commit comparison.
 
     Per SKILL.md Step 8: ``resume_base_sha`` if this run started from --resume,
-    otherwise the last completed phase's commit_sha (or base_sha for phase 1).
+    otherwise the most recent completed phase with a concrete commit_sha (or
+    base_sha for phase 1). Entries with ``commit_sha: None`` (no-op phases,
+    rogue-commit handbacks) are skipped so they don't poison the baseline.
     """
     if state.get("resume_base_sha"):
         return state["resume_base_sha"]
-    completed = state.get("completed_phases") or []
-    if completed:
-        return completed[-1]["commit_sha"]
+    for entry in reversed(state.get("completed_phases") or []):
+        sha = entry.get("commit_sha")
+        if sha:
+            return sha
     return state["base_sha"]
 
 
@@ -353,6 +356,10 @@ def _run_phase(
 ) -> ConductResult:
     state["iteration_count"] = 0
     state["current_phase_title"] = phase.title
+    # Keep on-disk phase_index aligned with the number of already-completed
+    # phases so external readers see a live counter that matches SKILL.md's
+    # documented schema.
+    state["phase_index"] = len(state.get("completed_phases") or [])
     _persist_state(opts, state)
 
     strategy, strategy_reason = _spawn_strategy(phase)
@@ -502,6 +509,11 @@ def _commit_phase(
             "index": phase.position,
             "label": phase.label,
             "title": phase.title,
+            # HEAD has advanced to head_now by the subagent's rogue commit.
+            # Leave commit_sha=None to signal "conductor did not itself
+            # commit" (harness tests and state readers rely on this), but the
+            # baseline for any later phase walks back to a concrete SHA via
+            # `_phase_baseline`'s skip-None rule.
             "commit_sha": None,
             "rogue_commit_sha": head_now,
             "tests": "passed-but-rogue",
@@ -525,11 +537,15 @@ def _commit_phase(
             "index": phase.position,
             "label": phase.label,
             "title": phase.title,
-            "commit_sha": None,
+            # HEAD is unchanged; record it so the next phase's baseline
+            # falls back to the correct SHA rather than None.
+            "commit_sha": head_now,
             "tests": "passed",
             "iterations": state["iteration_count"],
+            "no_op": True,
         }
         state.setdefault("completed_phases", []).append(completed)
+        state.pop("resume_base_sha", None)
         return ConductResult(status="running", state=state, summary="")
 
     commit_msg = f"conduct: phase {phase.label} — {phase.title}"
@@ -669,9 +685,10 @@ def _retry_after_hook_failure(
     prior_diff = _staged_diff(opts.repo_root)
     _reset_index(opts.repo_root)
 
+    respawn_role = "implementer"
     while True:
         req = SpawnRequest(
-            role="implementer",
+            role=respawn_role,
             plan_path=str(opts.plan_path),
             phase_position=phase.position,
             phase_label=phase.label,
@@ -683,12 +700,18 @@ def _retry_after_hook_failure(
         )
         text = opts.spawn(req)
         try:
-            parse_report(text, "implementer")
+            report = parse_report(text, respawn_role)
         except SchemaError as exc:
             state["status"] = "schema_error"
             state["blocker"] = str(exc)
             _persist_state(opts, state)
             return ConductResult(status="schema_error", state=state, summary=str(exc))
+        # SKILL.md Step 6: if implementer flagged test_contract_mismatch, the
+        # next iteration respawns the test-writer instead.
+        if respawn_role == "implementer" and report.get("flags", {}).get("test_contract_mismatch"):
+            respawn_role = "test-writer"
+        else:
+            respawn_role = "implementer"
 
         # Tests
         test_cmd = _resolve_test_cmd(opts, phase)
@@ -736,24 +759,37 @@ def pause_phase(opts: ConductOptions) -> ConductResult:
     sp = _state_path(opts)
     if not sp.exists():
         return ConductResult(status="awaiting_user", state={}, summary="no active run")
-    state = json.loads(sp.read_text())
-    label = state.get("current_phase_title", "?")
-    msg = f"conduct-pause-phase-{label}"
-    _git(["stash", "push", "-u", "-m", msg], opts.repo_root, check=False)
-    state["status"] = "paused"
-    _persist_state(opts, state)
-    return ConductResult(status="paused", state=state, summary=f"paused: {msg}")
+    lock = StateLock(str(sp.with_suffix(sp.suffix + ".lock")))
+    with lock:
+        state = json.loads(sp.read_text())
+        label = state.get("current_phase_title", "?")
+        msg = f"conduct-pause-phase-{label}"
+        _git(["stash", "push", "-u", "-m", msg], opts.repo_root, check=False)
+        state["status"] = "paused"
+        _persist_state(opts, state)
+        return ConductResult(status="paused", state=state, summary=f"paused: {msg}")
 
 
 def abort_run(opts: ConductOptions) -> ConductResult:
     """`--abort-run`: delete state plus any stale lockfile/lockdir. No git ops, no stash."""
     sp = _state_path(opts)
-    if sp.exists():
-        sp.unlink()
     lockfile = sp.with_suffix(sp.suffix + ".lock")
+    lockdir = sp.with_suffix(sp.suffix + ".lock.lockdir")
+    # Acquire the lock while we tear down so we don't race with a running
+    # conductor. We delete the lockfile afterwards, which is safe because
+    # the StateLock context manager has already released the fd/lockdir by
+    # the time control leaves the `with` block.
+    if sp.exists() and lockfile.exists():
+        try:
+            with StateLock(str(lockfile)):
+                sp.unlink()
+        except Exception:
+            if sp.exists():
+                sp.unlink()
+    elif sp.exists():
+        sp.unlink()
     if lockfile.exists():
         lockfile.unlink()
-    lockdir = sp.with_suffix(sp.suffix + ".lock.lockdir")
     if lockdir.exists():
         pid_file = lockdir / "pid"
         if pid_file.exists():
