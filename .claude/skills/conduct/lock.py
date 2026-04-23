@@ -63,20 +63,26 @@ class StateLock:
             self._acquire_mkdir()
 
     def release(self) -> None:
+        # Do NOT unlink the lockfile on release. Unlinking between LOCK_UN and
+        # the next acquirer's O_CREAT opens a race where two processes can
+        # flock distinct inodes under the same path. The stale-break sweeper
+        # handles left-over lockfiles on the next acquire.
         if self._fd is not None:
             try:
                 fcntl.flock(self._fd, fcntl.LOCK_UN)  # type: ignore[union-attr]
             finally:
                 os.close(self._fd)
                 self._fd = None
-                try:
-                    self.path.unlink()
-                except FileNotFoundError:
-                    pass
         if self._lockdir is not None:
+            # Remove pid file first, then rmdir. Still racy in principle, but
+            # the mkdir fallback only fires when fcntl is unavailable.
+            try:
+                (self._lockdir / "pid").unlink()
+            except FileNotFoundError:
+                pass
             try:
                 self._lockdir.rmdir()
-            except FileNotFoundError:
+            except (FileNotFoundError, OSError):
                 pass
             self._lockdir = None
 
@@ -120,20 +126,81 @@ class StateLock:
         now = time.time()
         for candidate in candidates:
             try:
-                age = now - candidate.stat().st_mtime
+                # Use lstat so a symlink doesn't mask a live target.
+                st = candidate.lstat()
             except FileNotFoundError:
                 continue
+            # Refuse to break a lock whose entry is a symlink — that is almost
+            # certainly an attack or a misconfigured workspace, not a stale
+            # lock we should silently remove.
+            if candidate.is_symlink():
+                sys.stderr.write(
+                    f"conduct: refusing to break symlinked lock entry {candidate}\n"
+                )
+                continue
+            age = now - st.st_mtime
             if age <= STALE_SECONDS:
+                continue
+            if not _holder_is_dead(candidate):
+                # PID recorded in the lockfile/pid file is still alive, or
+                # another process holds flock. Don't break.
                 continue
             sys.stderr.write(
                 f"conduct: breaking stale lock {candidate} (age={int(age)}s)\n"
             )
             if candidate.is_dir():
                 for child in candidate.iterdir():
-                    child.unlink()
-                candidate.rmdir()
+                    if child.is_symlink():
+                        continue
+                    try:
+                        child.unlink()
+                    except FileNotFoundError:
+                        pass
+                try:
+                    candidate.rmdir()
+                except OSError:
+                    pass
             else:
-                candidate.unlink()
+                try:
+                    candidate.unlink()
+                except FileNotFoundError:
+                    pass
+
+
+def _holder_is_dead(candidate: Path) -> bool:
+    """Best-effort: True if no live process claims this lock.
+
+    For fcntl lockfiles: probe ``flock(LOCK_EX|LOCK_NB)``. Success = no holder.
+    For mkdir lockdirs: read ``pid`` file and ``os.kill(pid, 0)``.
+    """
+    try:
+        if candidate.is_file() and fcntl is not None:
+            fd = os.open(str(candidate), os.O_RDWR | os.O_NOFOLLOW)
+            try:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore[union-attr]
+                    fcntl.flock(fd, fcntl.LOCK_UN)  # type: ignore[union-attr]
+                    return True  # nobody holds it
+                except OSError:
+                    return False
+            finally:
+                os.close(fd)
+        if candidate.is_dir():
+            pid_file = candidate / "pid"
+            try:
+                pid = int(pid_file.read_text().strip())
+            except (FileNotFoundError, ValueError):
+                return True
+            try:
+                os.kill(pid, 0)
+                return False  # signal delivered → process exists
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                return False  # exists but owned by another user
+    except OSError:
+        pass
+    return True
 
 
 def _cli_acquire(path: str) -> int:
@@ -148,17 +215,30 @@ def _cli_acquire(path: str) -> int:
 
 
 def _cli_release(path: str) -> int:
-    lock = StateLock(path)
-    lock._fd = None  # release-only path does not reacquire
-    lock._lockdir = None
     lock_path = Path(path)
     lockdir = lock_path.with_suffix(lock_path.suffix + ".lockdir")
     if lockdir.exists():
+        if lockdir.is_symlink():
+            sys.stderr.write(
+                f"conduct: refusing to release symlinked lockdir {lockdir}\n"
+            )
+            return 1
         for child in lockdir.iterdir():
-            child.unlink()
-        lockdir.rmdir()
-    elif lock_path.exists():
-        lock_path.unlink()
+            if child.is_symlink():
+                continue
+            try:
+                child.unlink()
+            except FileNotFoundError:
+                pass
+        try:
+            lockdir.rmdir()
+        except OSError:
+            pass
+    elif lock_path.exists() and not lock_path.is_symlink():
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
     return 0
 
 

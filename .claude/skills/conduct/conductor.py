@@ -136,6 +136,17 @@ def run_preflight(opts: ConductOptions) -> Optional[ConductResult]:
             diagnostic=f"plan not found: {opts.plan_path}",
         )
 
+    # Marker hashing shells out to ``git hash-object``; state init does the
+    # same. Fail fast here rather than with a FileNotFoundError deep in the
+    # stack when ``git`` is missing from PATH.
+    if shutil.which("git") is None:
+        return ConductResult(
+            status="preflight_fail",
+            state={},
+            summary="git not found on PATH",
+            diagnostic="`git` is required for marker hashing and commit; install git and retry.",
+        )
+
     marker = read_marker(opts.plan_path)
     if marker is None:
         return ConductResult(
@@ -181,15 +192,24 @@ def _load_or_init_state(opts: ConductOptions) -> dict:
     sp = _state_path(opts)
     if sp.exists():
         state = json.loads(sp.read_text())
-        # Backfill keys that older state files may be missing so that downstream
-        # consumers can rely on the documented schema.
-        state.setdefault("plan_content_hash", compute_plan_hash(opts.plan_path))
-        state.setdefault("last_summary", "")
+        # Backfill keys that older state files may be missing so the on-disk
+        # schema converges to what SKILL.md documents. Persist immediately so
+        # a crash before the next write does not leave backfill-in-memory only.
+        mutated = False
+        if "plan_content_hash" not in state:
+            state["plan_content_hash"] = compute_plan_hash(opts.plan_path)
+            mutated = True
+        if "last_summary" not in state:
+            state["last_summary"] = ""
+            mutated = True
         if opts.resume:
             state["resume_base_sha"] = _head_sha(opts.repo_root)
             state["status"] = "running"
+            mutated = True
+        if mutated:
+            _persist_state(opts, state)
         return state
-    return {
+    state = {
         "plan_path": str(opts.plan_path),
         "plan_content_hash": compute_plan_hash(opts.plan_path),
         "base_sha": _head_sha(opts.repo_root),
@@ -200,6 +220,8 @@ def _load_or_init_state(opts: ConductOptions) -> dict:
         "status": "running",
         "blocker": None,
     }
+    _persist_state(opts, state)
+    return state
 
 
 def _persist_state(opts: ConductOptions, state: dict) -> None:
@@ -573,16 +595,25 @@ def _commit_phase(
     commit_msg = f"conduct: phase {phase.label} — {phase.title}"
     proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
 
-    # Formatter-hook retry: if a pre-commit hook modified files (black, ruff
-    # --fix, prettier), the tree now has unstaged modifications. Re-stage those
-    # paths and retry the commit once in-place before routing to the fix loop.
-    # A logic error would fail again on retry; a formatter hook typically won't.
+    # Formatter-hook retry: if a pre-commit hook modified tracked files in
+    # place (black, ruff --fix, prettier), the tree now has unstaged
+    # modifications on files we originally staged. Re-stage those paths and
+    # retry the commit once before routing to the fix loop. Scope is limited
+    # to tracked modifications ONLY — we do NOT sweep in untracked files the
+    # hook may have created, because that would also sweep in unrelated
+    # worktree artefacts (scratch files, log output, prior incomplete work)
+    # and can silently produce commits the user did not intend. Hooks that
+    # emit genuinely new artefacts (codegen, lockfile generation) fall
+    # through to the fix loop and surface the hook output to the implementer,
+    # which is the correct recovery path.
     if proc.returncode != 0:
         unstaged = _git(
             ["diff", "--name-only"], opts.repo_root, check=False
         ).stdout.strip()
         if unstaged:
-            warnings.append("pre-commit hook modified files; re-staged and retrying")
+            warnings.append(
+                "pre-commit hook modified tracked files; re-staged and retrying"
+            )
             _git(["add", "-u"], opts.repo_root, check=False)
             proc = _git(["commit", "-m", commit_msg], opts.repo_root, check=False)
 
@@ -692,9 +723,10 @@ def conduct(opts: ConductOptions) -> ConductResult:
         # Test command: / Validation cmd:, the conductor will fall through to
         # degraded mode (sequential spawn + test fallback) for every phase.
         # That's a valid choice but often an oversight in the plan template.
+        internal = state.setdefault("_internal", {})
         if phases and not any(p.has_any_slot() for p in phases) \
-                and not state.get("_slot_warning_shown"):
-            state["_slot_warning_shown"] = True
+                and not internal.get("slot_warning_shown"):
+            internal["slot_warning_shown"] = True
             state.setdefault("warnings_for_next_handback", []).append(
                 "no phase declares Impl files: / Test files: / Test command: / "
                 "Validation cmd: slots — running in degraded mode. "

@@ -9,13 +9,17 @@ elsewhere in the plan (in prose or code fences) is ignored. The hash is
 ``git hash-object`` of the plan with that final line stripped, so hashing is
 idempotent across append-or-replace updates and safe when the plan body
 contains illustrative marker-shaped lines.
+
+Note on crypto: the hash is SHA-1 (via ``git hash-object``). This is a
+drift-detection stop-sign for plan edits, not a cryptographic authentication
+of the plan body — an adversary who can edit the plan can also rewrite the
+marker. Collision resistance is not part of the threat model.
 """
 
 from __future__ import annotations
 
 import re
 import subprocess
-import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -31,22 +35,17 @@ def strip_marker_for_hashing(plan_text: str) -> str:
     """
     if not plan_text:
         return plan_text
-    # Work by lines; a trailing newline produces an empty final element.
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    # Find the last non-empty line.
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip():
             last_idx = i
             break
     else:
-        return plan_text  # all blank
+        return plan_text
 
     if MARKER_RE.match(lines[last_idx]):
         remaining = lines[:last_idx]
-        # Drop trailing blanks that followed the stripped marker; keep the
-        # result consistent regardless of whether the marker had blank lines
-        # after it.
         while remaining and not remaining[-1].strip():
             remaining.pop()
         result = "\n".join(remaining)
@@ -56,32 +55,30 @@ def strip_marker_for_hashing(plan_text: str) -> str:
     return plan_text
 
 
+def _hash_stripped(plan_text: str) -> str:
+    """Pipe the stripped plan text to ``git hash-object --stdin``."""
+    proc = subprocess.run(
+        ["git", "hash-object", "--stdin"],
+        input=plan_text.encode("utf-8"),
+        capture_output=True,
+        check=True,
+    )
+    return proc.stdout.decode("utf-8").strip()
+
+
 def compute_plan_hash(plan_path: str | Path) -> str:
     """Return ``git hash-object`` of the plan with marker stripped per the rule
-    above. Uses a tempfile so the computation is deterministic and does not
-    require staging.
+    above. Streams via stdin — no temp file is created on disk.
     """
-    plan = Path(plan_path).read_text()
-    stripped = strip_marker_for_hashing(plan)
-    with tempfile.NamedTemporaryFile(
-        "w", delete=False, suffix=".plan", encoding="utf-8"
-    ) as tmp:
-        tmp.write(stripped)
-        tmp_path = tmp.name
-    try:
-        out = subprocess.check_output(
-            ["git", "hash-object", tmp_path], text=True
-        )
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
-    return out.strip()
+    plan = Path(plan_path).read_text(encoding="utf-8")
+    return _hash_stripped(strip_marker_for_hashing(plan))
 
 
 def read_marker(plan_path: str | Path) -> tuple[str, str] | None:
     """Return ``(iso_date, sha1)`` if the plan's final non-empty line is a
     marker, else ``None``.
     """
-    plan = Path(plan_path).read_text().splitlines()
+    plan = Path(plan_path).read_text(encoding="utf-8").splitlines()
     for line in reversed(plan):
         if not line.strip():
             continue
@@ -99,20 +96,9 @@ def write_marker(plan_path: str | Path, when: date | None = None) -> str:
     marker (same hash, possibly newer date).
     """
     path = Path(plan_path)
-    plan = path.read_text()
+    plan = path.read_text(encoding="utf-8")
     stripped = strip_marker_for_hashing(plan)
-    # Hash the stripped content — this is what the marker records.
-    with tempfile.NamedTemporaryFile(
-        "w", delete=False, suffix=".plan", encoding="utf-8"
-    ) as tmp:
-        tmp.write(stripped)
-        tmp_path = tmp.name
-    try:
-        sha = subprocess.check_output(
-            ["git", "hash-object", tmp_path], text=True
-        ).strip()
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
+    sha = _hash_stripped(stripped)
 
     iso = (when or date.today()).isoformat()
     marker_line = f"<!-- reviewed: {iso} @ {sha} -->"
@@ -121,7 +107,7 @@ def write_marker(plan_path: str | Path, when: date | None = None) -> str:
         new_text = f"{stripped}{marker_line}\n"
     else:
         new_text = f"{stripped}\n{marker_line}\n"
-    path.write_text(new_text)
+    path.write_text(new_text, encoding="utf-8")
     return sha
 
 

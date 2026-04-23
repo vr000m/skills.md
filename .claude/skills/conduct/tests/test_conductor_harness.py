@@ -452,7 +452,7 @@ def test_precommit_hook_failure_routes_to_fix_loop(repo):
     and complete the phase on the next attempt.
     """
     hooks_dir = repo / ".git" / "hooks"
-    counter = repo / ".hook-counter"
+    counter = repo / ".git" / "hook-counter"
     counter.write_text("0\n")
     hook = hooks_dir / "pre-commit"
     hook.write_text(
@@ -757,8 +757,14 @@ def test_resume_base_sha_is_cleared_after_phase_commits(repo):
 
 
 def _which_stub(present: set[str]):
-    """Returns a shutil.which replacement that reports only ``present``."""
-    return lambda name: f"/usr/bin/{name}" if name in present else None
+    """Returns a shutil.which replacement that reports only ``present``.
+
+    ``git`` is always resolvable because preflight hard-stops without it and
+    these lint-detection tests want to exercise the lint-check branch, not
+    the git-missing branch.
+    """
+    present_with_git = present | {"git"}
+    return lambda name: f"/usr/bin/{name}" if name in present_with_git else None
 
 
 def test_detect_lint_command_returns_none_when_nothing_available(tmp_path, monkeypatch):
@@ -913,7 +919,7 @@ def test_nested_precommit_hook_failure_inside_retry_loop_recovers(repo):
     the code path that handles a hook-fail inside a hook-retry iteration.
     """
     hooks_dir = repo / ".git" / "hooks"
-    counter = repo / ".hook-counter"
+    counter = repo / ".git" / "hook-counter"
     counter.write_text("0\n")
     hook = hooks_dir / "pre-commit"
     hook.write_text(
