@@ -584,7 +584,7 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 - [x] Repo distribution plumbing no longer treats `conduct` as Claude-only once Phase 8 lands: README, AGENTS, `.env.example`, and sync/promote/bootstrap/check defaults are updated together with the new Codex skill.
 - [x] Codex `/conduct` uses `spawn_agent` / `wait_agent` / `close_agent` (or the explicitly documented fallback policy) while preserving the same report schema, handback command, and state-file contract as Claude `/conduct`
 - [x] `deep-review` remains independent of `.conduct` runtime state; any edits there are limited to workflow/documentation positioning
-- [ ] Code reviewed and approved (regular review + `/deep-review`)
+- [x] Code reviewed and approved (`/review`, `/deep-review`, `/security-review` on branch; findings 1-4 closed in `b8283d4`, deep-review findings closed in `d0731b7`/`df62805`, security-review clean)
 - [x] All Phase 6 manual scenarios pass (including rogue-commit, schema-error, marker-in-body safety, pre-existing lint failure). All 21 Phase 6 scenarios ticked; harness + preflight + schema + runner tests cover them deterministically.
 - [x] Documentation updated
 
@@ -609,13 +609,4 @@ Claude and Codex now both have `/conduct` incarnations with shared plan contract
 
 ### Follow-up Work
 
-- **Skill namespacing** (`workflow:dev-plan`, `workflow:conduct`, …) — evaluate after conduct proves the workflow.
-- **Codex delegation-unavailable policy** — if some Codex environments cannot delegate, decide whether `/conduct` should degrade to main-session execution or hard-stop with a clear diagnostic.
-- **Shared helper extraction** — if Claude/Codex helper modules drift enough to become a maintenance burden, extract a shared conduct helper library in a later refactor rather than during the initial Codex port.
-- **LLM-based fix-loop classifier** — current design leans on the implementer's self-reported flag. If misrouting is common in practice, consider a tiny classifier call.
-- **Deferred architecture refactors from `/deep-review` (2026-04-23)**. Non-blocking, but worth a follow-up branch:
-  - Extract a shared `_fix_iteration(opts, state, phase, respawn_role, hook_output)` helper so `_run_phase` and `_retry_after_hook_failure` stop duplicating the spawn→parse→test→cap→reset body.
-  - Replace the private `_CommitHookFailure` exception-as-control-flow with a `CommitOutcome` dataclass carrying `hook_failed` + `hook_output`, so `_commit_phase`'s documented return shape matches reality.
-  - Encode the "reviewer role has no `flags`" asymmetry in `schema._ROLE_REQUIRED` (e.g., a `has_flags: bool`) rather than a comment.
-  - Add a call-site comment in `_run_phase` that the parallel/sequential strategy string is advisory for the LLM orchestrator; the harness always issues both spawns sequentially.
-  - Add a sweep in `scripts/check-sync.sh` (or a comment in all four sync scripts) warning when a global skill dir exists for a skill no longer listed in `MANAGED_SKILLS` / `CLAUDE_ONLY_SKILLS`.
+Non-blocking items have moved to [`docs/BACKLOG.md`](../BACKLOG.md) under the `/conduct` section. None block this PR.
