@@ -45,6 +45,7 @@ from conductor import (
     detect_lint_command,
     pause_phase,
 )
+from lock import StateLock
 from marker import compute_plan_hash, write_marker
 from runner import TestResult as _TestResult  # rename — pytest tries to collect any class named Test*
 
@@ -305,6 +306,39 @@ def test_multi_phase_via_resume_advances_one_phase_at_a_time(repo):
     assert [p["label"] for p in second.state["completed_phases"]] == ["1", "2"]
 
 
+def test_existing_state_requires_explicit_resume(repo):
+    plan = _scratch_plan(repo, PLAN_TWO_PHASES)
+    first_spawner = StubSpawner(repo)
+    first_spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    first_spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    first = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=first_spawner, test_runner=runner)
+    )
+    assert first.status == "awaiting_user"
+
+    second_spawner = StubSpawner(repo)
+    second = conduct(
+        ConductOptions(
+            plan_path=plan,
+            repo_root=repo,
+            spawn=second_spawner,
+            test_runner=StubTestRunner(queue=[_passing()]),
+        )
+    )
+    assert second.status == "awaiting_user"
+    assert second.next_command == f"Run: /conduct --resume {plan}"
+    assert len(second.state["completed_phases"]) == 1
+    assert second_spawner.calls == []
+    log = _git(["log", "--oneline"], repo).stdout.splitlines()
+    assert sum("conduct: phase" in line for line in log) == 1
+
+
 def test_assertion_failure_respawns_implementer_and_passes_on_iteration_1(repo):
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
     spawner = StubSpawner(repo)
@@ -534,6 +568,30 @@ def test_abort_run_deletes_state_without_touching_tree(repo):
     assert "conduct-" not in stash
 
 
+def test_abort_run_refuses_when_state_lock_held(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    state_file = state_dir / "state-20260422-scratch.json"
+    state_file.write_text(
+        json.dumps(
+            {
+                "plan_path": str(plan),
+                "plan_content_hash": compute_plan_hash(plan),
+                "current_phase_title": "Add a file",
+            }
+        )
+    )
+    lock = StateLock(state_file.with_suffix(state_file.suffix + ".lock"))
+    lock.acquire()
+    try:
+        result = abort_run(ConductOptions(plan_path=plan, repo_root=repo, spawn=lambda r: ""))
+        assert result.status == "blocked"
+        assert state_file.exists()
+    finally:
+        lock.release()
+
+
 def test_rogue_commit_detection_does_not_stack_a_second_commit(repo):
     """Subagent commits during its own work; conductor must detect and refuse."""
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)
@@ -649,6 +707,110 @@ def test_resume_across_simulated_restart_picks_up_at_next_phase(repo):
     assert labels == ["1", "2"]
 
 
+def test_resume_rejects_state_from_different_plan_path(repo):
+    plan = _scratch_plan(repo, PLAN_TWO_PHASES)
+    other_plan = repo / "tmp" / "20260422-scratch.md"
+    other_plan.parent.mkdir(parents=True)
+    other_plan.write_text(textwrap.dedent(PLAN_TWO_PHASES))
+    write_marker(other_plan)
+
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    (state_dir / "state-20260422-scratch.json").write_text(
+        json.dumps(
+            {
+                "plan_path": str(other_plan),
+                "plan_content_hash": compute_plan_hash(other_plan),
+                "base_sha": _git(["rev-parse", "HEAD"], repo).stdout.strip(),
+                "phase_index": 0,
+                "current_phase_title": "",
+                "completed_phases": [],
+                "last_summary": "",
+                "iteration_count": 0,
+                "status": "awaiting_user",
+                "blocker": None,
+            }
+        )
+    )
+
+    spawner = StubSpawner(repo)
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=StubTestRunner())
+    )
+    assert result.status == "preflight_fail"
+    assert "state does not match current reviewed plan" in result.summary
+    assert spawner.calls == []
+
+
+def test_resume_rejects_reviewed_plan_hash_drift(repo):
+    plan = _scratch_plan(repo, PLAN_TWO_PHASES)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+
+    first = conduct(
+        ConductOptions(
+            plan_path=plan,
+            repo_root=repo,
+            spawn=spawner,
+            test_runner=StubTestRunner(queue=[_passing()]),
+        )
+    )
+    assert first.status == "awaiting_user"
+
+    plan.write_text(
+        textwrap.dedent(
+            """\
+            # Scratch
+            ## Implementation Checklist
+
+            ### Phase 1: First
+
+            **Impl files:** src/a.py
+            **Test files:** tests/test_a.py
+            **Test command:** `true`
+
+            - [x] one
+
+            ### Phase X: Inserted
+
+            **Impl files:** src/x.py
+            **Test files:** tests/test_x.py
+            **Test command:** `true`
+
+            - [ ] inserted
+
+            ### Phase 2: Second
+
+            **Impl files:** src/b.py
+            **Test files:** tests/test_b.py
+            **Test command:** `true`
+
+            - [ ] two
+            """
+        )
+    )
+    write_marker(plan)
+
+    second_spawner = StubSpawner(repo)
+    result = conduct(
+        ConductOptions(
+            plan_path=plan,
+            repo_root=repo,
+            spawn=second_spawner,
+            test_runner=StubTestRunner(queue=[_passing()]),
+            resume=True,
+        )
+    )
+    assert result.status == "preflight_fail"
+    assert "state does not match current reviewed plan" in result.summary
+    assert second_spawner.calls == []
+
+
 # ---------------------------------------------------------------------------
 # C1: repo-default test-cmd fallback (SKILL.md Step 5)
 # ---------------------------------------------------------------------------
@@ -711,6 +873,7 @@ def test_resume_base_sha_is_cleared_after_phase_commits(repo):
         json.dumps(
             {
                 "plan_path": str(plan),
+                "plan_content_hash": compute_plan_hash(plan),
                 "base_sha": phase1_sha,  # arbitrary prior baseline
                 "completed_phases": [
                     {
@@ -792,6 +955,14 @@ def test_detect_lint_command_falls_through_to_npm_run_lint(tmp_path, monkeypatch
 
 def test_detect_lint_command_falls_through_to_ruff_for_python_repo(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
+    assert detect_lint_command(tmp_path) == ["ruff", "check", "."]
+
+
+def test_detect_lint_command_falls_through_to_ruff_for_nested_python_repo(tmp_path, monkeypatch):
+    nested = tmp_path / ".codex" / "skills" / "conduct"
+    nested.mkdir(parents=True)
+    (nested / "conductor.py").write_text("print('x')\n")
     monkeypatch.setattr("conductor.shutil.which", _which_stub({"ruff"}))
     assert detect_lint_command(tmp_path) == ["ruff", "check", "."]
 

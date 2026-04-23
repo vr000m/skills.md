@@ -59,7 +59,7 @@ conduct --abort-run <plan-path>
 | `--resume` | Resume after a handback. Reads state, picks up at the next unfinished phase. |
 | `--status` | Print the state file contents and exit. No git ops. |
 | `--pause-phase` | `git stash push -u -m "conduct-pause-phase-<N>"`, mark phase as user-paused, exit. State lives; `--resume` picks up. |
-| `--abort-run` | Delete the state file and any stale lockfile/lockdir for this plan. No git ops, no stash. The more-destructive flag has the more-explicit name. |
+| `--abort-run` | Delete the state file for this plan once the state lock is free. If another `/conduct` run is active, exit non-destructively and tell the user to retry. No git ops, no stash. |
 | `--test-cmd CMD` | Override the phase's `Test command:` slot and any repo default. |
 | `--test-timeout SECS` | Wall-clock cap on the test-runner subprocess. Default 300. |
 | `--max-iterations N` | Fix-loop cap. Default 3. |
@@ -96,8 +96,9 @@ This prevents subagent fix-loops from chasing issues they didn't introduce.
 
 `<repo-root>/.conduct/state-<plan-basename>.json`, where repo-root comes from `git rev-parse --show-toplevel`.
 
-- If present and `--resume`: load and continue from `phase_index`. Refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
-- If present without `--resume`: warn, print state summary, suggest `--resume` or `--abort-run`, exit.
+- If present and `--resume`: load only when both `state.plan_path` and `state.plan_content_hash` still match the current reviewed plan. On match, continue from `phase_index` and refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
+- If present and the stored plan path/hash do not match the current reviewed plan: hard-stop and tell the user to `--abort-run` before starting over.
+- If present without `--resume`: warn, print state summary, suggest `--resume` or `--abort-run`, exit without entering the phase loop.
 - If absent: initialise with `plan_content_hash = compute_plan_hash(plan)`, `base_sha = git rev-parse HEAD`, `phase_index = 0`, `current_phase_title = ""`, `last_summary = ""`, `iteration_count = 0`, `status = "running"`.
 
 Acquire an advisory lock on `.conduct/state-<plan-basename>.json.lock` before any write (see `lock.py` shipped with this skill).
@@ -255,7 +256,7 @@ Schema:
 
 - Primary: `lock.py` acquires `fcntl.flock` on `<state-file>.lock` fd.
 - Fallback if Python is unavailable: atomic `mkdir <state-file>.lockdir`.
-- Stale locks older than 1 hour are broken with a warning.
+- Flock-backed lockfiles are never broken by age alone. For the fallback `mkdir` lockdir path, stale lockdirs older than 1 hour are broken only when the recorded pid is missing or dead.
 - `flock(1)` is NOT used — unavailable by default on macOS.
 - Two `/conduct` invocations on the same plan in the same worktree race on the same lock. Sibling worktrees resolve to distinct repo-roots via `git rev-parse --show-toplevel` and therefore distinct state files.
 

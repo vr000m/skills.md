@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from lock import StateLock
+from lock import LockError, StateLock, lock_is_held
 from marker import compute_plan_hash, marker_is_stale, read_marker
 from parser import Phase, files_overlap, parse_phases
 from runner import TestResult, run_tests
@@ -198,26 +198,22 @@ def _state_path(opts: ConductOptions) -> Path:
     return opts.repo_root / ".conduct" / f"state-{opts.plan_path.stem}.json"
 
 
-def _load_or_init_state(opts: ConductOptions) -> dict:
-    sp = _state_path(opts)
-    if sp.exists():
-        state = json.loads(sp.read_text())
-        state.setdefault("plan_path", str(opts.plan_path))
-        state.setdefault("plan_content_hash", compute_plan_hash(opts.plan_path))
-        state.setdefault("phase_index", len(state.get("completed_phases") or []))
-        state.setdefault("current_phase_title", "")
-        state.setdefault("completed_phases", [])
-        state.setdefault("last_summary", "")
-        state.setdefault("iteration_count", 0)
-        state.setdefault("status", "running")
-        state.setdefault("blocker", None)
-        if opts.resume:
-            state["resume_base_sha"] = _head_sha(opts.repo_root)
-            state["status"] = "running"
-        return state
+def _normalize_loaded_state(state: dict) -> dict:
+    normalized = dict(state)
+    normalized.setdefault("phase_index", len(normalized.get("completed_phases") or []))
+    normalized.setdefault("current_phase_title", "")
+    normalized.setdefault("completed_phases", [])
+    normalized.setdefault("last_summary", "")
+    normalized.setdefault("iteration_count", 0)
+    normalized.setdefault("status", "running")
+    normalized.setdefault("blocker", None)
+    return normalized
+
+
+def _init_state(opts: ConductOptions, plan_hash: str) -> dict:
     return {
         "plan_path": str(opts.plan_path),
-        "plan_content_hash": compute_plan_hash(opts.plan_path),
+        "plan_content_hash": plan_hash,
         "base_sha": _head_sha(opts.repo_root),
         "phase_index": 0,
         "current_phase_title": "",
@@ -227,6 +223,59 @@ def _load_or_init_state(opts: ConductOptions) -> dict:
         "status": "running",
         "blocker": None,
     }
+
+
+def _load_or_init_state(opts: ConductOptions, plan_hash: str) -> tuple[dict, bool]:
+    sp = _state_path(opts)
+    if sp.exists():
+        state = _normalize_loaded_state(json.loads(sp.read_text()))
+        return state, True
+    return _init_state(opts, plan_hash), False
+
+
+def _state_matches_plan(state: dict, opts: ConductOptions, plan_hash: str) -> bool:
+    plan_path = state.get("plan_path")
+    if not isinstance(plan_path, str):
+        return False
+    if Path(plan_path).resolve() != opts.plan_path.resolve():
+        return False
+    return state.get("plan_content_hash") == plan_hash
+
+
+def _resume_required_result(opts: ConductOptions, state: dict) -> ConductResult:
+    completed = len(state.get("completed_phases") or [])
+    summary = (
+        f"Existing conduct state found for {opts.plan_path}\n"
+        f"  Status: {state.get('status', 'unknown')}\n"
+        f"  Completed phases: {completed}"
+    )
+    if state.get("last_summary"):
+        summary = f"{summary}\n{state['last_summary'].rstrip()}"
+    return ConductResult(
+        status="awaiting_user",
+        state=state,
+        summary=summary,
+        next_command=f"Run: /conduct --resume {opts.plan_path}",
+        diagnostic=f"Run: /conduct --abort-run {opts.plan_path}",
+    )
+
+
+def _state_mismatch_result(
+    opts: ConductOptions, state: dict, current_plan_hash: str
+) -> ConductResult:
+    return ConductResult(
+        status="preflight_fail",
+        state=state,
+        summary="state does not match current reviewed plan",
+        diagnostic=(
+            "Existing conduct state does not belong to the current reviewed plan.\n"
+            f"Stored plan_path: {state.get('plan_path', '<missing>')}\n"
+            f"Stored plan_content_hash: {state.get('plan_content_hash', '<missing>')}\n"
+            f"Current plan_path: {opts.plan_path}\n"
+            f"Current plan_content_hash: {current_plan_hash}\n"
+            f"Run: /conduct --abort-run {opts.plan_path}"
+        ),
+    )
 
 
 def _persist_state(opts: ConductOptions, state: dict) -> None:
@@ -269,7 +318,8 @@ def detect_lint_command(repo_root: Path) -> Optional[list[str]]:
       2. ``make lint`` — needs a ``Makefile`` with a ``lint:`` target and ``make`` on PATH.
       3. ``npm run lint`` — needs ``package.json`` with ``scripts.lint`` and ``npm`` on PATH.
       4. ``ruff check .`` — needs ``ruff`` on PATH and at least one Python signal in repo
-         (``pyproject.toml`` or any ``*.py`` file at the top level).
+         (``pyproject.toml`` or any tracked-source-style ``*.py`` file anywhere under the repo
+         root other than ``.git`` internals).
     """
     pcc = repo_root / ".pre-commit-config.yaml"
     if pcc.exists() and shutil.which("pre-commit"):
@@ -296,7 +346,9 @@ def detect_lint_command(repo_root: Path) -> Optional[list[str]]:
             return ["npm", "run", "lint"]
 
     if shutil.which("ruff"):
-        if (repo_root / "pyproject.toml").exists() or any(repo_root.glob("*.py")):
+        if (repo_root / "pyproject.toml").exists() or any(
+            ".git" not in py.parts for py in repo_root.rglob("*.py")
+        ):
             return ["ruff", "check", "."]
 
     return None
@@ -682,7 +734,15 @@ def conduct(opts: ConductOptions) -> ConductResult:
     sp.parent.mkdir(parents=True, exist_ok=True)
     lock = StateLock(str(sp.with_suffix(sp.suffix + ".lock")))
     with lock:
-        state = _load_or_init_state(opts)
+        plan_hash = compute_plan_hash(opts.plan_path)
+        state, state_exists = _load_or_init_state(opts, plan_hash)
+        if state_exists and not _state_matches_plan(state, opts, plan_hash):
+            return _state_mismatch_result(opts, state, plan_hash)
+        if state_exists and not opts.resume:
+            return _resume_required_result(opts, state)
+        if state_exists and opts.resume:
+            state["resume_base_sha"] = _head_sha(opts.repo_root)
+            state["status"] = "running"
 
         plan_text = opts.plan_path.read_text()
         phases = [p for p in parse_phases(plan_text) if not p.is_complete]
@@ -814,24 +874,28 @@ def abort_run(opts: ConductOptions) -> ConductResult:
     sp = _state_path(opts)
     lockfile = sp.with_suffix(sp.suffix + ".lock")
     lockdir = sp.with_suffix(sp.suffix + ".lock.lockdir")
-    # Acquire the lock while we tear down so we don't race with a running
-    # conductor. We delete the lockfile afterwards, which is safe because
-    # the StateLock context manager has already released the fd/lockdir by
-    # the time control leaves the `with` block.
-    if sp.exists() and lockfile.exists():
-        try:
-            with StateLock(str(lockfile)):
-                sp.unlink()
-        except Exception:
+    if lock_is_held(lockfile):
+        return ConductResult(
+            status="blocked",
+            state={},
+            summary="lock held by active conduct run",
+            diagnostic="Retry after the active /conduct invocation exits.",
+        )
+    try:
+        with StateLock(str(lockfile)):
             if sp.exists():
                 sp.unlink()
-    elif sp.exists():
-        sp.unlink()
+    except LockError:
+        return ConductResult(
+            status="blocked",
+            state={},
+            summary="lock held by active conduct run",
+            diagnostic="Retry after the active /conduct invocation exits.",
+        )
     if lockfile.exists():
         lockfile.unlink()
     if lockdir.exists():
-        pid_file = lockdir / "pid"
-        if pid_file.exists():
-            pid_file.unlink()
+        for child in lockdir.iterdir():
+            child.unlink()
         lockdir.rmdir()
     return ConductResult(status="aborted", state={}, summary="state deleted")

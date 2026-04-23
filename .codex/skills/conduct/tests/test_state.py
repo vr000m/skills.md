@@ -3,7 +3,8 @@
 The schema test asserts the JSON round-trip for the documented keys; it does
 not assert against any runtime code that writes the state file (main Codex
 writes it via the skill flow). Lock tests exercise acquire, release,
-contention, and stale-break behaviour on ``lock.StateLock``.
+contention, flock safety, and stale fallback-lockdir handling on
+``lock.StateLock``.
 """
 
 from __future__ import annotations
@@ -81,12 +82,26 @@ def test_lock_contention_raises(tmp_path: Path):
         first.release()
 
 
-def test_lock_stale_break(tmp_path: Path):
+def test_old_flock_lockfile_does_not_split_lock_ownership(tmp_path: Path):
     lockfile = tmp_path / "state.json.lock"
-    # Manually plant a stale lockfile.
-    lockfile.write_text(f"{os.getpid() ^ 0xDEAD}\n")
+    first = StateLock(lockfile)
+    first.acquire()
     old = time.time() - (STALE_SECONDS + 60)
     os.utime(lockfile, (old, old))
-    # Acquire should break the stale lock rather than raise.
+    try:
+        with pytest.raises(LockError):
+            StateLock(lockfile).acquire()
+    finally:
+        first.release()
+
+
+def test_stale_fallback_lockdir_breaks_when_owner_dead(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("lock.fcntl", None)
+    lockfile = tmp_path / "state.json.lock"
+    lockdir = lockfile.with_suffix(lockfile.suffix + ".lockdir")
+    lockdir.mkdir()
+    (lockdir / "pid").write_text("999999\n")
+    old = time.time() - (STALE_SECONDS + 60)
+    os.utime(lockdir, (old, old))
     with StateLock(lockfile):
         pass
