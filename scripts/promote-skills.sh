@@ -10,8 +10,8 @@ fi
 
 GLOBAL_CODEX_SKILLS_DIR="${GLOBAL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_CLAUDE_SKILLS_DIR="${GLOBAL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
-MANAGED_SKILLS="${MANAGED_SKILLS:-content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
-CLAUDE_ONLY_SKILLS="${CLAUDE_ONLY_SKILLS:-conduct}"
+MANAGED_SKILLS="${MANAGED_SKILLS:-conduct content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
+CLAUDE_ONLY_SKILLS="${CLAUDE_ONLY_SKILLS:-}"
 GLOBAL_CODEX_AGENTS="${GLOBAL_CODEX_AGENTS:-$HOME/.codex/AGENTS.md}"
 GLOBAL_CLAUDE_MD="${GLOBAL_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}"
 
@@ -21,7 +21,10 @@ if [[ "${1:-}" != "--yes" ]]; then
 fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
-read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
+claude_only_skills=()
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
+fi
 
 copy_reference_files_to_global() {
 	local repo_references_code="$ROOT_DIR/.codex/skills/content-review/references"

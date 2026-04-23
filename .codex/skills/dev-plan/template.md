@@ -34,21 +34,38 @@ Use this template when creating new development plans.
 
 ## Review Focus
 
-[Optional. Add the review criteria that `/review-plan` and `/deep-review` should pay attention to.
-Include exact spec/RFC references, compatibility constraints, known risks, or any other checks the
-author wants reviewers to make. Keep it concrete and short.]
+[Optional review criteria for `/review-plan` and `/deep-review`. Include spec or RFC references here if they matter.]
 
 - Focus item 1
 - Focus item 2
+- RFC/spec references, if applicable
 
 ## Implementation Checklist
 
+Each phase MAY include a short contract block directly under the heading. These slots are consumed by `/conduct` to decide how to spawn subagents and run tests; all three are optional but strongly recommended for phases that `/conduct` will execute.
+
+- `**Impl files:**` — comma-separated paths or globs the implementer will touch (e.g., `src/foo.py, src/bar/*.ts`)
+- `**Test files:**` — comma-separated paths or globs the test-writer will create/modify
+- `**Test command:**` — the single canonical test invocation for this phase, in backticks (e.g., ``**Test command:** `pytest tests/test_foo.py -v` ``)
+
+If `Impl files:` and `Test files:` overlap (same path or one is a subpath of the other), `/conduct` falls back to sequential spawning for that phase. If any slot is absent, `/conduct` falls back to safe defaults (sequential spawn, resolve test command from repo defaults or `--test-cmd`).
+
 ### Phase 1: [Phase Name]
+
+**Impl files:** `path/to/foo.ts, path/to/bar.ts`
+**Test files:** `tests/test_foo.ts`
+**Test command:** `npm test -- tests/test_foo.ts`
+
 - [ ] Task 1
 - [ ] Task 2
 - [ ] Task 3
 
 ### Phase 2: [Phase Name]
+
+**Impl files:** ...
+**Test files:** ...
+**Test command:** `...`
+
 - [ ] Task 1
 - [ ] Task 2
 

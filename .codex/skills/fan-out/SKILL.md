@@ -8,6 +8,12 @@ argument-hint: "[plan-file | status | logs N | cancel [N] | merge | cleanup] [--
 
 Dispatch independent tasks to parallel Codex agents, each in an isolated git worktree with its own branch.
 
+## Delegation Depth
+
+Spawned agents are one level deep — they implement their assigned task and must not themselves invoke `/fan-out` or start a new parallel-agent tier. This keeps the worktree/process model and merge accounting tractable.
+
+A fan-out-spawned Codex session may invoke `/conduct` as its top-level skill — the process/worktree boundary starts a new orchestrator tree, so `fan-out → conduct → {implementer, test-writer}` stays within the per-tree one-level rule. `/conduct` itself does not fan out; keep parallelism at the outer layer.
+
 ## Usage
 
 - `/fan-out docs/dev_plans/20260206-feature-xyz.md` -- Parse plan, fan out independent tasks

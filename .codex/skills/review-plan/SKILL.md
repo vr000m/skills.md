@@ -10,7 +10,7 @@ Audit a development plan before implementation begins. Read the plan as if you w
 
 ## Why This Exists
 
-Plans encode assumptions. Some are stated, most are not. The author knows what they meant; a fresh reader sees only what is written. This skill exploits that gap: review the plan cold, explore the codebase to verify claims, and surface what is missing, ambiguous, or risky. Findings go back to the user for discussion - the plan is never modified automatically.
+Plans encode assumptions. Some are stated, most are not. The author knows what they meant; a fresh reader sees only what is written. This skill exploits that gap: review the plan cold, explore the codebase to verify claims, and surface what is missing, ambiguous, or risky. Findings go back to the user for discussion - the plan body is never modified automatically. The sole exception is the trailing review marker footer written after the user explicitly accepts or waives the findings; `/conduct` consumes that marker as its readiness signal.
 
 ## When to Run
 
@@ -103,16 +103,44 @@ If the review is clean (no critical or important findings), say so concisely and
 
 ### Step 4: Discussion
 
-Do NOT modify the plan automatically. The findings are a starting point for conversation:
+Do NOT modify the plan body automatically. The findings are a starting point for conversation:
 - The user may accept some findings and reject others
 - Some findings may need clarification or deeper investigation
 - Accepted findings should be incorporated via `/dev-plan update`
 
 Only after the user has reviewed and addressed the findings (or explicitly decided to proceed) should implementation begin.
 
+### Step 5: Write the Review Marker
+
+After findings have been presented and discussed, ask the user one question:
+
+> Are findings addressed? (`yes` / `waive` / `no`)
+
+- `yes` — the user incorporated the findings they intend to address. Write the marker.
+- `waive` — the user reviewed the findings and chose not to act on them. Write the marker anyway.
+- `no` — exit without writing. The user can rerun `/review-plan` later.
+
+The review marker is a single HTML-comment line appended as the final line of the plan file:
+
+```html
+<!-- reviewed: YYYY-MM-DD @ <hash> -->
+```
+
+- `YYYY-MM-DD` is today's date.
+- `<hash>` is the 40-character SHA-1 from `git hash-object <tmpfile>`, where `<tmpfile>` is the plan with its final line removed only if that final line already matches `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. Otherwise hash the plan as-is.
+
+Procedure:
+
+1. Read the plan file.
+2. If the final non-empty line matches the marker regex, strip only that final line in memory; marker-shaped text elsewhere in the body stays untouched.
+3. Compute `git hash-object` of the stripped content.
+4. Append or replace the trailing marker so it is the final line of the file, with exactly one trailing newline.
+
+Only the final non-empty line counts as the review marker. Marker-shaped text inside prose or code fences is ignored by both the hashing step here and `/conduct` preflight later.
+
 ## Constraints
 
-- Never modify the plan file directly - findings drive a conversation, not automatic edits
+- Never modify the plan body automatically - findings drive a conversation, not automatic edits. The trailing review marker footer is the only allowed automated write, and only after explicit user acceptance (`yes`/`waive`).
 - Review from the plan text and the codebase, not from unstated parent-conversation context
 - If you delegate, use a supported high-reasoning Codex model from the current environment instead of hardcoding a specific model ID in the skill
 - This skill blocks - the user waits for the review before proceeding
