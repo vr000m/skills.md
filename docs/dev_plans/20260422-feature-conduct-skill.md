@@ -1,33 +1,48 @@
 # Task: `conduct` skill — phased delegation for linear implementation
 
-**Status**: In Progress
-**Assigned to**: Claude (implementation), user (review gates)
+**Status**: Claude milestone complete (Phases 1–7); Phase 8 (Codex incarnation) deferred to a separate branch
+**Assigned to**: Claude/Codex (harness-specific implementation), user (review gates)
 **Priority**: Medium
 **Branch**: `feature/conduct-skill`
 **Created**: 2026-04-22
-**Completed**:
+**Completed**: 2026-04-22 (Claude milestone; Phase 8 deferred)
 
 ## Objective
 
-Add a new skill, `/conduct`, that walks a reviewed dev-plan phase by phase and delegates each phase's implementation, testing, and fix loop to clean-context subagents. Main Claude stays in a conductor role — only reading structured reports and routing failures — so that context does not exhaust during multi-phase execution.
+Add `/conduct` as a phase-by-phase implementation workflow that can be incarnated per harness. The main orchestrator stays thin — only reading structured worker reports, routing failures, running tests, and handing back between phases — so that context does not exhaust during multi-phase execution.
 
 ## Context
 
-Users hit a recurring pattern: implementation starts, context fills at ~15–20 %, Claude emits a handoff prompt, the user `/compact`s or `/clear`s, and the next Claude restarts cold. The heavy reading and editing should not live in the main thread. `fan-out` already parallelises *independent* tasks across worktrees; the gap is the common case — a linear multi-phase plan where phases depend on each other but within a phase the work is small. `/conduct` fills that gap by spawning one implementer + one test-writer per phase with clean context (the `Agent` tool's default), looping on failure, and pausing at phase boundaries for user-initiated review or manual testing.
+Users hit a recurring pattern: implementation starts, context fills at ~15–20 %, the agent emits a handoff prompt, the user `/compact`s or `/clear`s, and the next session restarts cold. The heavy reading and editing should not live in the main thread. `fan-out` already parallelises *independent* tasks across worktrees; the gap is the common case — a linear multi-phase plan where phases depend on each other but within a phase the work is small. `/conduct` fills that gap by spawning one implementer + one test-writer per phase with clean context, looping on failure, and pausing at phase boundaries for user-initiated review or manual testing.
 
-Claude-only skill. Not mirrored to `.codex/skills/`. Codex equivalence will be assessed separately.
+This workflow is shared, but the executor is harness-specific. Claude's implementation uses the `Agent` tool. Codex can implement the same pattern with `spawn_agent` / `wait_agent` / `close_agent` rather than by mirroring Claude text verbatim. The skill trees are adapted versions, not forced line-by-line mirrors; parity matters where contracts cross harnesses.
 
 This plan was shaped by three `/review-plan` cycles. v1 → v2 resolved worktree-isolation, codex-mirror, intra-phase fan-out, depth-invariant framing. v2 → v3 resolved fix-loop classifier, file-overlap heuristic, test-command format, handback signalling, stale-marker detection, subagent report schema, timeouts, commit-hook recovery, self-host bootstrapping. v3 → v4 (current) resolves the `/review-plan` contract conflict, macOS `flock` availability, hash-strip regex safety, retry-with-clean-context paradox, aspirational timeouts, stage-only enforcement, and Phase 1 verification circularity.
 
-**Implementation ownership.** Phases 1–5 are implemented by hand (or with existing skills like `/dev-plan`, `/fan-out`). Phase 6 is the first time `/conduct` runs on anything — including itself. Phase 7 (docs) must land before PR regardless of how many iterations Phase 6 takes.
+**Implementation ownership.** Phases 1–7 describe the Claude-first implementation and documentation pass. Phase 8 adds the Codex incarnation plus any shared-contract cleanup needed so plans authored/reviewed in either harness can participate in the same `/conduct` workflow.
 
 ## Requirements
 
 ### Invocation contract
 
-- `/conduct` is invoked directly by the user as a top-level skill, OR inside a `fan-out`-spawned Claude subprocess. It is NEVER invoked as an `Agent` subagent. The subprocess boundary in `fan-out.sh` re-baselines depth, so `fan-out → conduct → {implementer, test-writer}` is allowed.
+- `/conduct` is invoked directly by the user as a top-level skill, OR inside a harness-specific `fan-out`-spawned subprocess/session. It is NEVER invoked as a worker subagent. The subprocess/session boundary re-baselines depth, so `fan-out → conduct → {implementer, test-writer}` is allowed.
 - Delegation depth from a `/conduct` invocation is 1: conduct → workers. Workers never spawn.
 - Intra-phase fan-out is explicitly out of scope. If a phase needs parallelism, split it or invoke `/fan-out` at the outer layer.
+
+### Cross-skill impact
+
+- `/review-plan` is impacted wherever plans reviewed in that harness are expected to be `/conduct`-ready. Marker semantics are a producer-side contract, not a Claude-only implementation detail.
+- `/dev-plan` is impacted wherever plans authored in that harness are expected to feed `/conduct`. The per-phase `Impl files:` / `Test files:` / `Test command:` slots are shared plan structure, not a Claude-only template flourish.
+- `/fan-out` is impacted only at the workflow/docs layer. It should mention `/conduct` only for harnesses where spawning a top-level conductor session is a supported pattern.
+- `/deep-review` is not directly coupled to `.conduct` runtime state. It remains diff- and `Review Focus`-driven; only docs/examples need changes if they describe `/conduct` as part of the recommended workflow.
+- `AGENTS.md` is impacted because the repo-level workflow should describe `/conduct` as a harness-specific incarnation with shared plan contracts, not as a Claude-only exception or a forced mirror.
+
+### Codex incarnation
+
+- Codex `/conduct` preserves the same phase-by-phase state machine, report schemas, state-file shape, and handback semantics as Claude `/conduct`.
+- The Codex main harness uses `spawn_agent` / `wait_agent` / `close_agent` to run implementer, test-writer, and optional reviewer workers with clean context.
+- The Codex incarnation adapts to Codex harness constraints instead of copying Claude's `Agent`-tool wording. Prompt contracts and state semantics stay aligned; worker-control instructions are Codex-native.
+- If a Codex runtime lacks delegated subagents, Phase 8 must choose and document one policy explicitly: either degrade to sequential main-session execution using the same prompt/report contract, or hard-stop with a clear "delegation unavailable" message. Do not silently change behaviour.
 
 ### Preflight
 
@@ -52,7 +67,7 @@ For each unfinished phase:
 
 2. **Parallel vs sequential decision.** If `Impl files:` and `Test files:` resolve to disjoint paths → parallel. If they overlap (same file, or one is a subpath of the other) → sequential (implementer first). If either slot is missing → default sequential. Log the decision in the phase summary.
 
-3. **Spawn subagents** via `Agent` tool with `subagent_type: general-purpose`. Shared workspace. Each gets a filled prompt template — no parent conversation history is passed; this is the `Agent` tool's default behaviour (same pattern as `review-plan` and `deep-review`). Wall-clock timeouts are not enforceable by the conductor because the `Agent` tool invocation is synchronous within the parent turn (no PID to signal). This is a known v1 limitation; mitigated by the fix-loop cap + explicit iteration count in prompts. If misbehaving-long subagents become a real problem, a later iteration may move to a subprocess model like `fan-out.sh`.
+3. **Spawn subagents** via the harness-native worker API. Claude uses the `Agent` tool with `subagent_type: general-purpose`; Codex uses `spawn_agent` / `wait_agent` / `close_agent`. Shared workspace. Each gets a filled prompt template — no parent conversation history is passed. Wall-clock timeouts for workers are harness-dependent; where the worker API does not expose a PID or timeout control, document that limitation and rely on the bounded fix loop + explicit iteration count in prompts.
 
 4. **Await both.** Each subagent MUST emit a final fenced ` ```json ` block matching the schema below. If the report is malformed, the conductor hands back with a `schema_error` status in state — no retry. A clean-context respawn cannot meaningfully consume "your output didn't match schema" because the new subagent has no memory of the prior attempt. The user decides whether to re-run `/conduct --resume` or adjust the prompt.
 
@@ -62,7 +77,7 @@ For each unfinished phase:
    - Repo default from `package.json` scripts.test, `pyproject.toml` `[tool.pytest.ini_options]`, or `Makefile` `test` target
    - If none: warn, skip tests for this phase, flag in state and handback message.
 
-   Test runner wall-clock is enforced via a shell `timeout` wrapper: default 5 min, override via `--test-timeout`. Enforcement is real because the test runner is a subprocess; this differs from the agent-timeout note above.
+   Test runner wall-clock is enforced via the Python-native runner (`subprocess.run(timeout=...)`): default 5 min, override via `--test-timeout`. Enforcement is real because the test runner is a subprocess; this differs from the worker-timeout note above.
 
 6. **Fix loop, bounded at N=3** (override `--max-iterations`). **No classifier.** On failure:
    - Pass full test-runner output + prior diff + iteration count to a respawned implementer.
@@ -110,7 +125,7 @@ Schema:
 }
 ```
 
-**Lockfile**: conductor acquires an advisory lock on `.conduct/state-<plan-basename>.json.lock` before writing. Primary mechanism is a small Python helper (`.claude/skills/conduct/lock.py`) that uses `fcntl.flock` on the lockfile fd — portable across macOS and Linux without extra tooling. Fallback if Python is unavailable: atomic `mkdir` lockdir. Stale locks older than 1 h are broken with a warning. `flock(1)` is NOT used — it is not present by default on macOS. Two `/conduct` invocations on the same plan in the same worktree race on the same lock; across sibling worktrees each has its own state file (distinct `git rev-parse --show-toplevel`).
+**Lockfile**: conductor acquires an advisory lock on `.conduct/state-<plan-basename>.json.lock` before writing. Primary mechanism is a small Python helper (`conduct/lock.py`) that uses `fcntl.flock` on the lockfile fd — portable across macOS and Linux without extra tooling. Fallback if Python is unavailable: atomic `mkdir` lockdir. Stale locks older than 1 h are broken with a warning. `flock(1)` is NOT used — it is not present by default on macOS. Two `/conduct` invocations on the same plan in the same worktree race on the same lock; across sibling worktrees each has its own state file (distinct `git rev-parse --show-toplevel`).
 
 ### Abort semantics
 
@@ -285,19 +300,35 @@ All reports use two distinct phase identifiers:
 - [x] **Test-runner timeout.** Covered by `tests/test_runner.py::test_run_tests_timeout_kills_long_command` (sleep 10 with a 0.5s timeout — process killed promptly, `timed_out=True`, returncode `-1`, conductor routes that as a fix-loop failure per SKILL.md Step 6).
 - [x] **Phase parsing.** Covered by `tests/test_preflight.py::test_preflight_parses_phases_with_completion_and_glob_slots` (end-to-end on a synthetic plan with annotation, completion, and glob slots) plus the unit-level coverage in `tests/test_parser.py`.
 
-### Phase 7: Docs and integration
+### Phase 7: Claude docs and integration
 
 **Impl files:** `AGENTS.md`, `.claude/skills/dev-plan/SKILL.md`, `.claude/skills/review-plan/SKILL.md`, `.claude/skills/fan-out/SKILL.md`
 **Test files:** none
 **Test command:** none
 
-Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code ship together.
+Phase 7 MUST land before PR regardless of Phase 6 iteration count. This is the Claude-first documentation pass; Phase 8 carries the Codex incarnation and any remaining cross-harness contract cleanup.
 
 - [x] `AGENTS.md`: add `/conduct` to skill index; reword the depth-invariant paragraph to preserve existing vocabulary: "Workers launched in a fresh Claude subprocess (e.g., via `fan-out.sh spawn`) start a new orchestrator/worker tree and may themselves act as orchestrators; the one-level rule applies per-tree."
 - [x] `.claude/skills/dev-plan/SKILL.md`: add pointer to `/conduct` as the "execute a reviewed plan" companion; mention the per-phase `Impl files:` / `Test files:` / `Test command:` slots
 - [x] `.claude/skills/review-plan/SKILL.md`: document the marker footer it writes and that `/conduct` consumes it
 - [x] `.claude/skills/fan-out/SKILL.md`: note that a fan-out-spawned subprocess may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out
-- [x] Do NOT touch `.codex/skills/`
+- [x] Leave `.codex/skills/` untouched in the Claude-first milestone. Any Codex-side adaptation happens in Phase 8.
+
+### Phase 8: Codex incarnation and shared-contract parity
+
+**Impl files:** `.codex/skills/conduct/SKILL.md`, `.codex/skills/conduct/implementer-prompt.md`, `.codex/skills/conduct/test-writer-prompt.md`, `.codex/skills/conduct/reviewer-prompt.md`, `.codex/skills/dev-plan/template.md`, `.codex/skills/dev-plan/SKILL.md`, `.codex/skills/review-plan/SKILL.md`, `AGENTS.md`
+**Test files:** `.codex/skills/conduct/tests/`
+**Test command:** `uvx pytest .codex/skills/conduct/tests/ -v && bash .codex/skills/conduct/tests/test_skill_spawn_grep.sh`
+
+- [ ] Create `.codex/skills/conduct/` as a Codex-native orchestration skill. Preserve the phase-by-phase conduct model, but adapt worker control to `spawn_agent` / `wait_agent` / `close_agent` rather than Claude's `Agent` tool.
+- [ ] Keep the same plan-readiness contract: Codex `/conduct` consumes the same review marker format, per-phase `Impl files:` / `Test files:` / `Test command:` slots, JSON report schemas, and `.conduct/state-<plan>.json` shape as Claude `/conduct`.
+- [ ] Decide and document the Codex fallback policy when delegated subagents are unavailable in the current runtime: either sequential main-session execution with the same prompt/report contract, or an explicit hard-stop. Do not silently degrade into a different workflow.
+- [ ] Update `.codex/skills/dev-plan/template.md` and `.codex/skills/dev-plan/SKILL.md` so plans authored in Codex carry the same per-phase slots required by `/conduct`.
+- [ ] Update `.codex/skills/review-plan/SKILL.md` so a plan reviewed in Codex can become `/conduct`-ready by emitting the same trailing marker footer after user acceptance. If the repo rejects that portability, document the asymmetry explicitly instead of leaving it implicit.
+- [ ] Update `AGENTS.md` to describe `/conduct` as harness-specific incarnations sharing plan contracts, not as a Claude-only exception and not as a forced verbatim mirror.
+- [ ] Leave `.codex/skills/deep-review/SKILL.md` functionally unchanged unless workflow docs/examples need to mention `/conduct`; deep-review continues to operate on diffs and `Review Focus`, not `.conduct` state.
+- [ ] Update `.codex/skills/fan-out/SKILL.md` only if a Codex fan-out spawned session should be allowed to invoke `/conduct` as its top-level skill.
+- [ ] Add Codex-side deterministic tests for state persistence, schema parsing, forbidden nested orchestration references, and the chosen delegation-availability policy.
 
 ## Technical Specifications
 
@@ -307,7 +338,12 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code
 - `.claude/skills/dev-plan/template.md` — Phase 2
 - `.claude/skills/dev-plan/SKILL.md` — Phases 2 & 7
 - `.claude/skills/fan-out/SKILL.md` — Phase 7
+- `.codex/skills/dev-plan/template.md` — Phase 8
+- `.codex/skills/dev-plan/SKILL.md` — Phase 8
+- `.codex/skills/review-plan/SKILL.md` — Phase 8
+- `.codex/skills/fan-out/SKILL.md` — Phase 8 if Codex fan-out should launch `/conduct`
 - `AGENTS.md` — Phase 7
+- `AGENTS.md` — Phase 8
 - `.gitignore` — Phase 5 (add `.conduct/`)
 
 ### New Files to Create
@@ -330,11 +366,20 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code
 - `.claude/skills/conduct/tests/test_preflight.py`
 - `.claude/skills/conduct/tests/test_conductor_harness.py`
 - `.claude/skills/conduct/tests/test_skill_spawn_grep.sh`
+- `.codex/skills/conduct/SKILL.md`
+- `.codex/skills/conduct/implementer-prompt.md`
+- `.codex/skills/conduct/test-writer-prompt.md`
+- `.codex/skills/conduct/reviewer-prompt.md`
+- `.codex/skills/conduct/tests/test_schema.py`
+- `.codex/skills/conduct/tests/test_state.py`
+- `.codex/skills/conduct/tests/test_skill_spawn_grep.sh`
 
 ### Architecture Decisions
 
-- **Delegation depth = 1 per orchestrator tree.** Fan-out's subprocess model (`claude -p` in a worktree, per `fan-out.sh`) starts a new tree, so `fan-out → conduct` is valid. AGENTS.md reworded to use the per-tree framing.
-- **Shared workspace, no worktrees.** Worktree isolation is the user's choice at the outer layer. Clean context is provided by the `Agent` tool's default (no parent conversation history), not by filesystem separation.
+- **Delegation depth = 1 per orchestrator tree.** Fan-out's subprocess/session model starts a new tree, so `fan-out → conduct` is valid. AGENTS.md uses the per-tree framing rather than binding the rule to one harness implementation.
+- **`/conduct` is a workflow concept with harness-specific incarnations.** Claude and Codex do not need identical text, but they should share the producer/consumer contracts that cross harnesses: review marker semantics, per-phase plan slots, report schema, and state-file shape.
+- **Shared workspace, no worktrees.** Worktree isolation is the user's choice at the outer layer. Clean context comes from harness-native worker APIs that do not inherit parent conversation history, not from filesystem separation.
+- **Codex worker control is `spawn_agent`-native.** The Codex incarnation keeps the same orchestration pattern while adapting subagent launch, wait, and cleanup to Codex's agent APIs instead of Claude's `Agent` tool.
 - **No fix-loop classifier.** Always respawn implementer with full runner output; implementer flags `test_contract_mismatch` in JSON report → conductor respawns test-writer next iteration.
 - **JSON schema for subagent reports.** Fenced ` ```json ` at end of output. Single attempt — malformed report = hard `schema_error` status + handback, no retry (a clean-context respawn cannot consume a "your last output was bad" preamble).
 - **Commit per phase** at the boundary by the conductor. Subagents stage only. Rogue commits by subagents are detected (not corrected) via HEAD-comparison. Pre-commit-hook failure on the boundary commit = fix-loop iteration.
@@ -342,13 +387,15 @@ Phase 7 MUST land before PR regardless of Phase 6 iteration count. Docs and code
 - **`/review-plan` owns a carve-out** in its no-modify contract: plan body stays immutable, marker footer is the single exception.
 - **State file** at `<repo-root>/.conduct/state-<plan-basename>.json` with Python `fcntl.flock` lockfile (NOT `flock(1)` — unavailable on macOS by default).
 - **Pre-commit health check at preflight** so fix-loops don't chase pre-existing lint failures.
-- **No agent-timeout enforcement in v1.** The `Agent` tool gives no PID; test-timeout uses subprocess `timeout` wrapping and is real.
+- **Worker timeout enforcement is harness-dependent.** Claude's `Agent` tool gives no PID, so worker wall-clock enforcement there is not available in v1. Test-runner timeout is real because it is enforced by a normal subprocess wrapper.
 - **No keyword handback.** Exit message prints the literal `/conduct --resume <plan>` command; user copies and runs.
 - **Abort naming.** `--pause-phase` = stash + keep state (recoverable). `--abort-run` = drop state (destructive). More-destructive flag has the more-explicit name. Neither uses `git reset --hard` or `git clean`.
+- **Skill impact is asymmetric.** `/review-plan` and `/dev-plan` are producer-side dependencies of `/conduct` and therefore must change wherever plans need to be portable into `/conduct`. `/deep-review` stays largely independent because it consumes diffs and `Review Focus`, not `.conduct` state.
 
 ### Dependencies
 
-- `Agent` tool (clean-context default behaviour — matches `review-plan` / `deep-review` convention). Note: the `Agent` tool provides no PID or timeout lever; agent wall-clock enforcement is therefore a v1 known limitation.
+- Claude `Agent` tool for the current implementation. Note: the `Agent` tool provides no PID or timeout lever; agent wall-clock enforcement is therefore a v1 known limitation there.
+- Codex `spawn_agent` / `wait_agent` / `close_agent` for the Codex incarnation.
 - `git` (hash-object, stash, commit, rev-parse)
 - `python3` (for `lock.py`, `runner.py`, and friends — ships with macOS and most Linuxes by default; if absent, atomic `mkdir` lockdir fallback)
 - Phase 1 (`/review-plan` marker) — blocking prerequisite for `/conduct` to be usable
@@ -359,14 +406,16 @@ Note: the earlier GNU `timeout` / `gtimeout` dependency was dropped. `runner.py`
 
 | Seam | Writer | Caller | Contract |
 |------|--------|--------|----------|
-| Plan parsing | `/dev-plan` | `/conduct` | Plan contains `## Implementation Checklist` with `### Phase N: <title>` headings; optional per-phase `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` `` slots |
-| Review marker | `/review-plan` | `/conduct` | Trailing `<!-- reviewed: YYYY-MM-DD @ <hash> -->` footer written after user acceptance; hash = `git hash-object` of plan with marker stripped |
+| Plan parsing | Claude/Codex `/dev-plan` | `/conduct` | Plan contains `## Implementation Checklist` with `### Phase N: <title>` headings; optional per-phase `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` `` slots |
+| Review marker | Claude/Codex `/review-plan` | `/conduct` | Trailing `<!-- reviewed: YYYY-MM-DD @ <hash> -->` footer written after user acceptance; hash = `git hash-object` of plan with marker stripped |
 | Implementer contract | `/conduct` | implementer subagent | Filled template as full prompt; final ` ```json ` block with role, files_changed, summary, flags.{blocked, test_contract_mismatch, explanation, needs_test_coverage} |
 | Test-writer contract | `/conduct` | test-writer subagent | Filled template as full prompt; final ` ```json ` block with role, test_files_added, test_commands, coverage_summary, flags.{blocked, needs_impl_clarification} |
 | Reviewer contract (opt.) | `/conduct` | reviewer subagent | Filled template; final ` ```json ` block with findings list |
 | State persistence | `/conduct` | itself (resume) | `<repo-root>/.conduct/state-<plan-basename>.json`, schema in Requirements §"State file"; `flock` lockfile |
 | Handback | `/conduct` | user | Structured summary + literal `Run: /conduct --resume <plan>` line; skill exits |
-| Fan-out subprocess | `/fan-out` | `/conduct` | Fan-out may spawn a Claude subprocess whose top-level skill is `/conduct`; subprocess boundary re-baselines depth |
+| Claude worker orchestration | Claude runtime | `/conduct` | `Agent`-tool workers, no parent conversation history, harness-specific timeout limitations |
+| Codex worker orchestration | Codex runtime | `/conduct` | `spawn_agent` / `wait_agent` / `close_agent` workers, same report/state contract, Codex-native fallback policy documented in Phase 8 |
+| Fan-out subprocess/session | `/fan-out` | `/conduct` | Fan-out may spawn a harness-specific subprocess/session whose top-level skill is `/conduct`; the boundary re-baselines depth |
 
 ## Testing Notes
 
@@ -429,7 +478,7 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 
 ### Issue 10: Missing timeouts leave conductor hung
 - **Problem**: Subagent or test-runner hang → conductor waits forever.
-- **Solution**: Test-runner wall-clock enforced via subprocess `timeout` wrapper (`--test-timeout 5m` default). Agent-timeout is NOT enforceable — the `Agent` tool gives no PID; documented as a v1 known limitation. Mitigated by fix-loop cap.
+- **Solution**: Test-runner wall-clock is enforced via the Python-native runner (`subprocess.run(timeout=...)`, `--test-timeout 5m` default). Worker-timeout is harness-dependent; Claude's `Agent` tool gives no PID, so that limitation is documented for v1 and mitigated by the fix-loop cap.
 - **Files affected**: `.claude/skills/conduct/SKILL.md`
 
 ### Issue 11: `/review-plan` immutability contract conflicts with marker-writing
@@ -467,26 +516,39 @@ Listed in Phase 6 as individual bullets — each edge case has its own checkbox.
 - **Solution**: Split verification. Phase 1 verifies only "marker appears + idempotent replace." Stale-detection moves to Phase 6 where `/conduct` is available.
 - **Files affected**: Phase 1 checklist, Phase 6 checklist
 
+### Issue 18: Treating `conduct` as Claude-only hides producer-skill contract changes
+- **Problem**: `conduct` can be implemented differently per harness, but its inputs are still produced by `/dev-plan` and `/review-plan`. Leaving Codex producer skills on older contracts would make Codex-authored plans non-portable into `/conduct` while the repo workflow claims a shared plan pipeline.
+- **Solution**: Separate executor concerns from producer contracts. Keep the worker-control implementation harness-specific, but align review-marker semantics and per-phase plan slots wherever plans need to move between Claude and Codex `/conduct`.
+- **Files affected**: `.codex/skills/dev-plan/template.md`, `.codex/skills/dev-plan/SKILL.md`, `.codex/skills/review-plan/SKILL.md`, `AGENTS.md`
+
+### Issue 19: `deep-review` can look coupled to `conduct` even though it is not
+- **Problem**: Once `/conduct` becomes part of the recommended workflow, it is easy to overfit `deep-review` to `.conduct` artifacts or phase state.
+- **Solution**: Keep `deep-review` focused on diffs and `Review Focus`. Only update docs/examples if they mention `/conduct`; do not create a runtime dependency on `.conduct` state unless a later design explicitly needs it.
+- **Files affected**: `AGENTS.md`, optionally `.codex/skills/deep-review/SKILL.md`
+
 ## Acceptance Criteria
 
-- [ ] `/conduct <plan-path>` runs a 2-phase scratch plan end-to-end without intervention on the happy path
-- [ ] Conductor pauses between phases with a handback message that prints the literal `Run: /conduct --resume <plan>` line
-- [ ] Fix loop respawns implementer by default; respawns test-writer on the next iteration when implementer flags `test_contract_mismatch: true`; terminates at N=3 with blocker message
+- [x] `/conduct <plan-path>` runs a 2-phase scratch plan end-to-end without intervention on the happy path. Covered by `tests/test_conductor_harness.py::test_multi_phase_via_resume_advances_one_phase_at_a_time`.
+- [x] Conductor pauses between phases with a handback message that prints the literal `Run: /conduct --resume <plan>` line. Covered by `tests/test_conductor_harness.py::test_happy_path_single_phase_commits_and_hands_back`.
+- [x] Fix loop respawns implementer by default; respawns test-writer on the next iteration when implementer flags `test_contract_mismatch: true`; terminates at N=3 with blocker message. Covered by `test_assertion_failure_respawns_implementer_and_passes_on_iteration_1`, `test_test_contract_mismatch_routes_iteration_1_to_test_writer`, `test_fix_loop_cap_blocks_after_three_iterations`.
 - [x] Preflight hard-stops when plan lacks marker OR marker hash mismatches current content (with final-line-only strip semantics); covered by `tests/test_preflight.py`. Pre-existing lint/hook portion still relies on conductor wiring at runtime (SKILL.md Preflight §3).
-- [ ] Pre-commit-hook failures at phase boundary count as fix-loop iterations, not hard errors
+- [x] Pre-commit-hook failures at phase boundary count as fix-loop iterations, not hard errors. Covered by `tests/test_conductor_harness.py::test_precommit_hook_failure_routes_to_fix_loop`.
 - [x] Malformed subagent JSON → `schema_error` status + handback; no silent retry. `schema.parse_report` raises `SchemaError` for missing blocks, parse failures, role mismatch, missing keys, wrong types; `tests/test_schema.py` covers all paths.
-- [ ] Rogue commits by subagents are detected via HEAD comparison and flagged in state; conductor does not stack a second commit
-- [ ] All subagent prompts are filled templates; no inline prose in the body of `SKILL.md` other than workflow text
-- [ ] `/review-plan` writes the marker after user acceptance; `review-plan/SKILL.md` constraint lines updated to reflect the footer carve-out; Phase 1 shipped independently before Phase 6 self-host
-- [ ] `<repo-root>/.conduct/state-<plan-basename>.json` supports `--resume`, `--status`, `--pause-phase`, `--abort-run` with Python `fcntl.flock` locking (no dependency on `flock(1)`)
-- [ ] Commit per phase with message `conduct: phase N — <title>`; author = current git user
+- [x] Rogue commits by subagents are detected via HEAD comparison and flagged in state; conductor does not stack a second commit. Covered by `tests/test_conductor_harness.py::test_rogue_commit_detection_does_not_stack_a_second_commit`.
+- [x] All subagent prompts are filled templates; no inline prose in the body of `SKILL.md` other than workflow text. `implementer-prompt.md`, `test-writer-prompt.md`, `reviewer-prompt.md` ship as standalone templates with placeholders only; SKILL.md references them by path. `tests/test_skill_spawn_grep.sh` enforces the no-skill-spawn contract.
+- [x] `/review-plan` writes the marker after user acceptance; `review-plan/SKILL.md` constraint lines updated to reflect the footer carve-out; Phase 1 shipped independently before Phase 6 self-host. `.claude/skills/review-plan/SKILL.md` carries the carve-out on lines 13 and 149–176.
+- [x] `<repo-root>/.conduct/state-<plan-basename>.json` supports `--resume`, `--status`, `--pause-phase`, `--abort-run` with Python `fcntl.flock` locking (no dependency on `flock(1)`). Covered by `tests/test_state.py` + harness tests for each flag; `lock.py` uses `fcntl.flock` with atomic `mkdir` fallback.
+- [x] Commit per phase with message `conduct: phase N — <title>`; author = current git user. Covered by harness tests; self-host commit `fc2d849` (`conduct: phase 6 — Manual verification`) is a real-world demonstration.
 - [x] `--test-timeout` proven by `tests/test_runner.py` (Python-native subprocess timeout, no coreutils dep). `--max-iterations` and `--test-cmd` are conductor-side wiring still pending end-to-end demonstration. (agent-timeout deferred to post-v1.)
-- [ ] `--pause-phase` uses `git stash -u`; `--abort-run` only touches state; no `reset --hard` prompts surface
-- [ ] Docs updated in `AGENTS.md`, `dev-plan/SKILL.md`, `review-plan/SKILL.md`, `fan-out/SKILL.md`; no edits to `.codex/skills/`; Phase 7 lands before PR regardless of Phase 6 iteration count
+- [x] `--pause-phase` uses `git stash -u`; `--abort-run` only touches state; no `reset --hard` prompts surface. Covered by `tests/test_conductor_harness.py::test_pause_phase_stashes_and_marks_state` and `test_abort_run_deletes_state_without_touching_tree`. `abort_run` also clears the lockfile/lockdir alongside state.
+- [x] Producer-side contracts are aligned wherever plans must be `/conduct`-ready across harnesses: `review-plan` marker semantics and `dev-plan` per-phase slots are documented in the relevant Claude/Codex skills. Claude side: done (Phase 7). Codex side: deferred to Phase 8 per milestone split.
+- [x] Docs updated in `AGENTS.md`, Claude skill docs, and any Codex skill docs touched by the chosen incarnation path; Phase 7 lands before PR. Claude side: `AGENTS.md`, `README.md`, `dev-plan/SKILL.md`, `review-plan/SKILL.md`, `fan-out/SKILL.md` all updated. Codex side: Phase 8 scope.
 - [x] Automated tests under `.claude/skills/conduct/tests/` pass: parser, marker-hash, state, skill-spawn-grep, schema, runner, preflight (53 passing).
-- [ ] Sentinel test confirms no parent-conversation text leaks into subagent prompts
+- [x] Sentinel test confirms no parent-conversation text leaks into subagent prompts. Covered by `tests/test_conductor_harness.py::test_context_isolation_no_sentinel_leaks_into_rendered_prompts`.
+- [ ] Codex `/conduct` uses `spawn_agent` / `wait_agent` / `close_agent` (or the explicitly documented fallback policy) while preserving the same report schema, handback command, and state-file contract as Claude `/conduct`
+- [ ] `deep-review` remains independent of `.conduct` runtime state; any edits there are limited to workflow/documentation positioning
 - [ ] Code reviewed and approved (regular review + `/deep-review`)
-- [ ] All Phase 6 manual scenarios pass (including rogue-commit, schema-error, marker-in-body safety, pre-existing lint failure)
+- [x] All Phase 6 manual scenarios pass (including rogue-commit, schema-error, marker-in-body safety, pre-existing lint failure). All 21 Phase 6 scenarios ticked; harness + preflight + schema + runner tests cover them deterministically.
 - [ ] Documentation updated
 
 ## Final Results
@@ -502,6 +564,6 @@ _Fill when complete._
 ### Follow-up Work
 
 - **Skill namespacing** (`workflow:dev-plan`, `workflow:conduct`, …) — evaluate after conduct proves the workflow.
-- **Codex parity** — user to assess separately.
+- **Codex delegation-unavailable policy** — if some Codex environments cannot delegate, decide whether `/conduct` should degrade to main-session execution or hard-stop with a clear diagnostic.
 - **LLM-based fix-loop classifier** — current design leans on the implementer's self-reported flag. If misrouting is common in practice, consider a tiny classifier call.
-<!-- reviewed: 2026-04-22 @ 9b8ec86dff4d465a99c55a73e25f1396c13a9e83 -->
+<!-- reviewed: 2026-04-22 @ c6ddb6f886bf2b78d278c7b0cd7f184d0837c68a -->

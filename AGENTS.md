@@ -33,7 +33,8 @@ Global is authoritative, repo is a mirror:
 - `sync-skills` copies global -> repo; `promote-skills` copies repo -> global
 - `~/.claude/CLAUDE.md` syncs bidirectionally with `.claude/CLAUDE.md`
 - `~/.codex/AGENTS.md` syncs bidirectionally with `.codex/AGENTS.md`
-- Only skills listed in `MANAGED_SKILLS` (from `.env` or a per-command env override) are synced
+- Only skills listed in `MANAGED_SKILLS` (from `.env` or a per-command env override) are synced between `.claude/` and `.codex/` mirrors
+- Skills listed in `CLAUDE_ONLY_SKILLS` (default: `conduct`) are promoted and synced Claude-side only; they are never read from or written to `.codex/`. Use this for skills whose Codex equivalence is deferred or intentionally absent
 - Content guidelines authority: repo-canonical file at `.codex/skills/content-review/references/content-guidelines.md`
 - Repo Claude mirror: `.claude/skills/content-review/references/content-guidelines.md`
 - Global mirrors: `~/.codex/skills/content-review/references/content-guidelines.md` and `~/.claude/skills/content-review/references/content-guidelines.md`
@@ -67,6 +68,7 @@ Format: `- **[Category] disposition**: description (YYYY-MM-DD)`
 - New machine setup: run `just bootstrap-skills` (initialises missing managed skills only)
 - Force bootstrap overwrite when needed: run `just bootstrap-skills-force`
 - Seed or promote only a subset for one run: prefix the command with `MANAGED_SKILLS="skill-a skill-b"`
+- Scope Claude-only skills similarly: prefix with `CLAUDE_ONLY_SKILLS="conduct"` (default already includes `conduct`; override to add or empty-out)
 - Validation: run `just check-sync`
 
 Notes:
@@ -74,7 +76,7 @@ Notes:
 - `promote-skills` and `bootstrap-skills` copy the repo-canonical `content-review/references/` directory into global skill directories when `content-review` is in `MANAGED_SKILLS`.
 - `bootstrap-skills` is non-destructive unless `--force` is provided (applies to skills, reference files, CLAUDE.md, and AGENTS.md).
 - `promote-skills` is destructive for the selected managed skills (`rsync --delete`) and always overwrites global `CLAUDE.md` and `AGENTS.md`.
-- `sync-skills` and `check-sync` skip managed skills that do not exist yet in the global authorities and tell you to seed them with `bootstrap-skills` or `promote-skills`.
+- `sync-skills` and `check-sync` skip managed skills that do not exist yet in the global authorities and tell you to seed them with `bootstrap-skills` or `promote-skills`. The same skip rule applies to `CLAUDE_ONLY_SKILLS`, Claude-side only.
 - `sync-skills` preserves the entire repo-canonical `references/` directory for content-review (does not overwrite from global) and refreshes the repo Claude copy from the canonical codex source.
 - `check-sync` requires both `content-guidelines.md` and `writing-style-rules.md` in the canonical references directory.
 - `sync-skills` warns for missing global `AGENTS.md` only when repo `.codex/AGENTS.md` exists.

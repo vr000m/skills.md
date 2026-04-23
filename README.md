@@ -15,6 +15,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 | rfc-finder | Yes | Yes | Find and link to IETF RFCs and related drafts |
 | spec-compliance | Yes | Yes | Check code against RFC/W3C/WHATWG requirements |
 | update-docs | Yes | Yes | Audit and update stale docs against branch diffs |
+| conduct | Yes | No | Walk a reviewed dev plan phase by phase via clean-context subagents (Codex parity deferred) |
 
 ## Setup
 
@@ -34,6 +35,7 @@ cp .env.example .env
 
 ```bash
 MANAGED_SKILLS="content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs"
+CLAUDE_ONLY_SKILLS="conduct"
 ```
 
 For one-off runs, prefer a command-scoped override instead of editing `.env`:
@@ -41,7 +43,10 @@ For one-off runs, prefer a command-scoped override instead of editing `.env`:
 ```bash
 MANAGED_SKILLS="rfc-finder" just bootstrap-skills
 MANAGED_SKILLS="rfc-finder" just promote-skills
+CLAUDE_ONLY_SKILLS="conduct" just promote-skills
 ```
+
+`MANAGED_SKILLS` lists skills kept in lockstep between `.claude/` and `.codex/` mirrors. `CLAUDE_ONLY_SKILLS` lists skills that live only under `.claude/` and are promoted exclusively to `~/.claude/skills/` — no `.codex` read or write. `conduct` is Claude-only while Codex parity is assessed separately.
 
 `bootstrap-skills` seeds missing global skill dirs without overwriting existing content unless `--force` is used. `promote-skills` intentionally overwrites the selected managed skills and also copies repo `.claude/CLAUDE.md` and `.codex/AGENTS.md` to the global paths.
 
