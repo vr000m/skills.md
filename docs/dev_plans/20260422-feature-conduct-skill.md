@@ -607,6 +607,29 @@ Claude and Codex now both have `/conduct` incarnations with shared plan contract
 - Flock-backed locks should never be garbage-collected by path age alone; stale handling must respect the underlying lock primitive.
 - The preflight probe needs to reflect repo layout rather than assume top-level language entrypoints.
 
+### Runtime parity notes (Claude vs Codex)
+
+Post-merge check (2026-04-23) cross-referenced `.claude/skills/conduct/conductor.py` against `.codex/skills/conduct/conductor.py`. Behaviour is the same on the load-bearing contracts; the interesting differences are all places where Codex is stricter than Claude.
+
+**Same on both sides**
+
+- Spawn model: `spawn: SpawnFn` as an injectable seam. Production Claude calls the `Agent` tool; production Codex calls `spawn_agent` / `wait_agent` / `close_agent`. Each call is a fresh delegated worker with clean context. No stacking across phases, fix-loop iterations, or resumes.
+- State schema: `completed_phases`, `phase_index`, `plan_content_hash`, `resume_base_sha`, handback warnings. No worker transcripts persisted.
+- Resume mechanics: record HEAD as `resume_base_sha`, jump to `len(completed_phases)`, spawn fresh workers; `resume_base_sha` cleared after the first successful phase commit.
+- Fix-loop iteration = new spawn. Forward-flowing data (test failures, resume base, staged-diff summaries) is passed via prompt fields, never via inherited context.
+
+**Where they differ**
+
+| Area | Claude | Codex |
+| --- | --- | --- |
+| State file path | `.conduct/state-<plan-basename>.json` | `.conduct/state-<plan-basename>-<digest>.json` (digest disambiguates same-basename plans at different paths) |
+| Resume gating | Loads any existing state unconditionally; `opts.resume` only refreshes `resume_base_sha`. | Hard-stops on `state_exists and not --resume`; also refuses on plan-hash / path drift. |
+| Clean-context enforcement | Prose instruction in SKILL.md ("Do not thread parent conversation context"). | `fork_context: false` in SKILL frontmatter — harness-level guarantee. |
+| Delegation-unavailable handling | Not needed (`Agent` tool always available). | Explicit `DELEGATION_UNAVAILABLE_MESSAGE` hard-stop when runtime can't delegate. |
+| Path safety | `lock.py` handles symlink refusal on the lockfile only. | `_ensure_safe_conduct_dir` / `_ensure_safe_fs_path` / `UnsafeConductPathError` cover the whole `.conduct/` subtree. |
+
+The state-path collision on Claude is a real (if rare) latent bug: two plans with the same basename at different paths map to the same state file; last writer wins. SKILL.md now documents it as a known limitation and `docs/BACKLOG.md` tracks the alignment fix. The resume-gating and enforcement-mechanism differences are intentional given runtime capabilities, not bugs.
+
 ### Follow-up Work
 
 Non-blocking items have moved to [`docs/BACKLOG.md`](../BACKLOG.md) under the `/conduct` section. None block this PR.
