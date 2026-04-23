@@ -46,7 +46,7 @@ Recommended development workflow using skills:
 1. `/dev-plan create feature xyz` — Create the plan
 2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete); on acceptance, writes a review marker footer consumed by `/conduct`
 3. Address review findings, update plan as needed
-4. `/conduct` — Walk a reviewed linear plan phase by phase, delegating implementation + tests per phase to harness-native clean-context subagents while preserving the shared review-marker, phase-slot, report-schema, state-file, and handback contracts (pair with `/fan-out` at the outer layer when phases themselves fan out)
+4. `/conduct` — Walk a reviewed linear plan phase by phase, delegating implementation + tests per phase to harness-native clean-context subagents while preserving the shared review-marker, phase-slot, report-schema, and handback contracts. State-file naming and resume-guard details may vary by harness implementation (pair with `/fan-out` at the outer layer when phases themselves fan out)
 5. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
 6. `/deep-review` — Run a multi-lens code review after implementation and before merge
 

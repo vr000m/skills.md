@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -102,6 +103,10 @@ DELEGATION_UNAVAILABLE_MESSAGE = (
     "Delegated subagents unavailable in this Codex runtime; the conduct skill requires "
     "spawn_agent, wait_agent, and close_agent support."
 )
+
+
+class UnsafeConductPathError(RuntimeError):
+    pass
 
 
 def delegation_unavailable_result(plan_path: str | Path) -> ConductResult:
@@ -240,6 +245,51 @@ def _state_path(opts: ConductOptions) -> Path:
     return opts.repo_root / ".conduct" / f"state-{opts.plan_path.stem}-{digest}.json"
 
 
+def _ensure_safe_conduct_dir(repo_root: Path) -> Path:
+    conduct_dir = repo_root / ".conduct"
+    if conduct_dir.exists():
+        if conduct_dir.is_symlink() or not conduct_dir.is_dir():
+            raise UnsafeConductPathError(f"unsafe conduct dir: {conduct_dir}")
+        return conduct_dir
+    conduct_dir.mkdir(parents=True, exist_ok=True)
+    if conduct_dir.is_symlink() or not conduct_dir.is_dir():
+        raise UnsafeConductPathError(f"unsafe conduct dir: {conduct_dir}")
+    return conduct_dir
+
+
+def _ensure_safe_fs_path(path: Path, *, expect_dir: bool | None = None) -> None:
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        return
+    if path.is_symlink():
+        raise UnsafeConductPathError(f"unsafe conduct path: {path}")
+    if expect_dir is True and not path.is_dir():
+        raise UnsafeConductPathError(f"expected directory at conduct path: {path}")
+    if expect_dir is False and path.is_dir():
+        raise UnsafeConductPathError(f"expected file at conduct path: {path}")
+
+
+def _safe_write_text(path: Path, text: str) -> None:
+    _ensure_safe_fs_path(path, expect_dir=False)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(str(path), flags, 0o644)
+    try:
+        os.write(fd, text.encode())
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _conduct_path_result(status: str, summary: str, path: Path) -> ConductResult:
+    return ConductResult(
+        status=status,
+        state={},
+        summary=summary,
+        diagnostic=f"Unsafe .conduct filesystem path: {path}",
+    )
+
+
 def _normalize_loaded_state(state: dict) -> dict:
     normalized = dict(state)
     normalized.setdefault("phase_index", len(normalized.get("completed_phases") or []))
@@ -322,8 +372,8 @@ def _state_mismatch_result(
 
 def _persist_state(opts: ConductOptions, state: dict) -> None:
     sp = _state_path(opts)
-    sp.parent.mkdir(parents=True, exist_ok=True)
-    sp.write_text(json.dumps(state, indent=2))
+    _ensure_safe_conduct_dir(opts.repo_root)
+    _safe_write_text(sp, json.dumps(state, indent=2))
 
 
 # ---------------------------------------------------------------------------
@@ -875,7 +925,11 @@ def conduct(opts: ConductOptions) -> ConductResult:
         return pre
 
     sp = _state_path(opts)
-    sp.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _ensure_safe_conduct_dir(opts.repo_root)
+        _ensure_safe_fs_path(sp, expect_dir=False)
+    except UnsafeConductPathError:
+        return _conduct_path_result("preflight_fail", "unsafe conduct state path", sp)
     lock = StateLock(str(sp.with_suffix(sp.suffix + ".lock")))
     with lock:
         plan_hash = compute_plan_hash(opts.plan_path)
@@ -1034,6 +1088,11 @@ def _retry_after_hook_failure(
 def pause_phase(opts: ConductOptions) -> ConductResult:
     """`--pause-phase`: stash work, mark state paused, exit."""
     sp = _state_path(opts)
+    try:
+        _ensure_safe_conduct_dir(opts.repo_root)
+        _ensure_safe_fs_path(sp, expect_dir=False)
+    except UnsafeConductPathError:
+        return _conduct_path_result("blocked", "unsafe conduct state path", sp)
     if not sp.exists():
         return ConductResult(status="awaiting_user", state={}, summary="no active run")
     lock = StateLock(str(sp.with_suffix(sp.suffix + ".lock")))
@@ -1052,6 +1111,13 @@ def abort_run(opts: ConductOptions) -> ConductResult:
     sp = _state_path(opts)
     lockfile = sp.with_suffix(sp.suffix + ".lock")
     lockdir = sp.with_suffix(sp.suffix + ".lock.lockdir")
+    try:
+        _ensure_safe_conduct_dir(opts.repo_root)
+        _ensure_safe_fs_path(sp, expect_dir=False)
+        _ensure_safe_fs_path(lockfile, expect_dir=False)
+        _ensure_safe_fs_path(lockdir, expect_dir=True)
+    except UnsafeConductPathError:
+        return _conduct_path_result("blocked", "unsafe conduct state path", sp)
     if lock_is_held(lockfile):
         return ConductResult(
             status="blocked",

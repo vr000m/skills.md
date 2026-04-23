@@ -41,6 +41,10 @@ class LockError(RuntimeError):
     pass
 
 
+def _nofollow_flag() -> int:
+    return getattr(os, "O_NOFOLLOW", 0)
+
+
 class StateLock:
     """Advisory lock on a given lockfile path.
 
@@ -90,7 +94,7 @@ class StateLock:
         self.release()
 
     def _acquire_flock(self) -> None:
-        fd = os.open(str(self.path), os.O_CREAT | os.O_RDWR, 0o644)
+        fd = os.open(str(self.path), os.O_CREAT | os.O_RDWR | _nofollow_flag(), 0o644)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore[union-attr]
         except OSError as err:
@@ -171,7 +175,10 @@ def lock_is_held(path: str | os.PathLike[str]) -> bool:
         return False
     if fcntl is None:
         return lockdir.exists()
-    fd = os.open(str(lock_path), os.O_RDWR)
+    try:
+        fd = os.open(str(lock_path), os.O_RDWR | _nofollow_flag())
+    except FileNotFoundError:
+        return False
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # type: ignore[union-attr]
         fcntl.flock(fd, fcntl.LOCK_UN)  # type: ignore[union-attr]

@@ -51,7 +51,7 @@ Each phase SHOULD include a short contract block directly under the heading. The
 
 If `Impl files:` and `Test files:` overlap, `/conduct` falls back to sequential spawning for that phase. If any slot is absent, `/conduct` falls back to safe defaults (sequential spawn, resolve test command from repo defaults or `--test-cmd`). If *every* unfinished phase is missing every slot, `/conduct` emits a degraded-mode warning on the first handback.
 
-Each phase MAY include an optional `**Findings:**` subsection that the implementer appends to during execution. Use this to persist diagnostic query results (with explicit filters stated), decision rationale, and any "checked / accepted behaviour" outcomes that would otherwise only live in a spawn report and be lost. `/conduct` subagents stage changes to the plan file like any other file.
+Each phase MAY include an optional `**Findings:**` subsection for durable notes that should survive after the run: diagnostic query results (with explicit filters stated), decision rationale, and any "checked / accepted behaviour" outcomes. For `/conduct`-driven work, do not rely on subagents to append to the reviewed plan during the run; keep live execution notes in conduct handbacks/state, then copy durable conclusions into `**Findings:**` when you intentionally update the plan.
 
 ### Phase 1: [Phase Name]
 

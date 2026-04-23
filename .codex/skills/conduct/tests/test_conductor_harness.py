@@ -922,6 +922,40 @@ def test_abort_run_does_not_delete_other_plan_state_with_same_basename(repo):
     assert state_a.exists()
 
 
+def test_abort_run_refuses_symlinked_state_path(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    state_file = _state_file(repo, plan)
+    victim = repo / "victim.txt"
+    victim.write_text("keep me\n")
+    state_file.symlink_to(victim)
+
+    result = abort_run(ConductOptions(plan_path=plan, repo_root=repo, spawn=lambda r: ""))
+    assert result.status == "blocked"
+    assert victim.read_text() == "keep me\n"
+    assert state_file.is_symlink()
+
+
+def test_conduct_refuses_symlinked_state_path(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    state_file = _state_file(repo, plan)
+    victim = repo / "victim.txt"
+    victim.write_text("keep me\n")
+    state_file.symlink_to(victim)
+
+    spawner = StubSpawner(repo)
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=StubTestRunner())
+    )
+    assert result.status == "preflight_fail"
+    assert "unsafe conduct state path" in result.summary
+    assert victim.read_text() == "keep me\n"
+    assert spawner.calls == []
+
+
 def test_rogue_commit_detection_does_not_stack_a_second_commit(repo):
     """Subagent commits during its own work; conductor must detect and refuse."""
     plan = _scratch_plan(repo, PLAN_ONE_PHASE)

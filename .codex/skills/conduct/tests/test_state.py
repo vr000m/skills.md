@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from conduct.lock import STALE_SECONDS, LockError, StateLock, main as lock_main
+from conduct.lock import STALE_SECONDS, LockError, StateLock, lock_is_held, main as lock_main
 
 
 STATE_REQUIRED_KEYS = {
@@ -109,3 +109,19 @@ def test_stale_fallback_lockdir_breaks_when_owner_dead(tmp_path: Path, monkeypat
 
 def test_lock_cli_rejects_release_action():
     assert lock_main(["lock.py", "release", "state.json.lock"]) == 2
+
+
+def test_lock_is_held_returns_false_when_lockfile_disappears_before_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    lockfile = tmp_path / "state.json.lock"
+    lockfile.write_text("")
+    original_open = os.open
+
+    def flaky_open(path: str, flags: int, mode: int = 0o777):
+        if Path(path) == lockfile:
+            raise FileNotFoundError
+        return original_open(path, flags, mode)
+
+    monkeypatch.setattr("conduct.lock.os.open", flaky_open)
+    assert lock_is_held(lockfile) is False
