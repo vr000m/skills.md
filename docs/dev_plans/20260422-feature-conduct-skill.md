@@ -63,7 +63,8 @@ For each unfinished phase:
    - `Impl files:` — comma-separated list of likely implementation file paths (globs allowed)
    - `Test files:` — comma-separated list of likely test file paths (globs allowed)
    - ``Test command: `<cmd>` `` — single canonical test invocation for this phase
-   - Any of these may be absent; conductor falls back as documented in §"Fallbacks" below.
+   - ``Validation cmd: `<cmd>` `` — optional. Runs after tests pass, before the boundary commit (see Step 5b). Failure triggers handback, NOT the fix loop.
+   - Any of these may be absent; conductor falls back as documented in §"Fallbacks" below. If *no* unfinished phase declares any of the four slots, preflight emits a one-shot degraded-mode warning into the first handback (the run proceeds, but the user is notified the plan cannot be fully automated).
 
 2. **Parallel vs sequential decision.** If `Impl files:` and `Test files:` resolve to disjoint paths → parallel. If they overlap (same file, or one is a subpath of the other) → sequential (implementer first). If either slot is missing → default sequential. Log the decision in the phase summary.
 
@@ -79,6 +80,8 @@ For each unfinished phase:
 
    Test runner wall-clock is enforced via the Python-native runner's dedicated subprocess session and process-group kill path: default 5 min, override via `--test-timeout`. Enforcement is real because the test runner is a subprocess; this differs from the worker-timeout note above.
 
+5b. **Run validation (if declared).** If the phase supplies a ``**Validation cmd:** `<cmd>` `` slot, run it via the same subprocess wrapper after tests pass and before the boundary commit. Validation shares the `Test command:` shell-trust boundary. Failure does **not** enter the fix loop — validation typically exercises live-data or external-service behaviour an implementer cannot auto-repair. On failure: persist `state.status = "awaiting_user"` with the validation output and hand back. The user decides whether to edit the phase, adjust the validation command, or `--resume`.
+
 6. **Fix loop, bounded at N=3** (override `--max-iterations`). **No classifier.** On failure:
    - Pass full test-runner output + prior diff + iteration count to a respawned implementer.
    - Implementer's JSON report includes a flag `test_contract_mismatch: bool` with optional `explanation`.
@@ -92,7 +95,7 @@ For each unfinished phase:
 8. **Commit at phase boundary.** After tests pass:
    - **Rogue-commit check.** Compare `git rev-parse HEAD` to `base_sha` from state (or phase-start SHA). If HEAD advanced, a subagent committed despite the prompt directive; conductor does NOT stack another commit — instead, annotate state with `rogue_commit_sha` and proceed to handback with a warning. This is a prompt-compliance signal, not a hard failure.
    - Otherwise: conductor runs `git commit -m "conduct: phase N — <phase title>"`. Commit author = current git user (no impersonation).
-   - If the pre-commit hook fails, route to fix loop (step 6). Do NOT use `--no-verify`.
+   - If the pre-commit hook fails, first check whether the hook modified staged files in place (formatters like `ruff --fix`, `prettier`, `black`). If it did, re-stage with `git add -u` and retry the commit once. If the retry still fails, or if the hook failed without modifying files, route to the fix loop (step 6). Do NOT use `--no-verify`.
    - Record commit SHA in state file.
 
 9. **Pause for handback.** Conductor:
@@ -227,7 +230,7 @@ All reports use two distinct phase identifiers:
 **Test files:** none
 **Test command:** none
 
-- [x] Extend template Phase sections with three optional slots immediately under each `### Phase N:` heading: `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` ``
+- [x] Extend template Phase sections with four optional slots immediately under each `### Phase N:` heading: `**Impl files:**`, `**Test files:**`, ``**Test command:** `<cmd>` ``, ``**Validation cmd:** `<cmd>` ``
 - [x] Update `dev-plan/SKILL.md` to explain these slots and when to fill them (omit when trivially inferable; required for `/conduct`-driven phases)
 - [x] Update this plan (20260422-feature-conduct-skill.md) to include the slots for its own phases (already done in this v3 draft — verify)
 

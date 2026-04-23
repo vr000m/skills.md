@@ -254,7 +254,7 @@ Schema:
   // adds follow-up commits during handback.
   "last_summary": "...",
   "iteration_count": 0,
-  "status": "awaiting_user | running | blocked | schema_error | complete",
+  "status": "awaiting_user | running | paused | blocked | schema_error | complete",
   "blocker": null
 }
 ```
