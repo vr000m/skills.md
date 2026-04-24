@@ -696,6 +696,25 @@ def test_validation_failure_without_test_command_hands_back_before_commit(repo):
     assert "conduct: phase 1" not in log
 
 
+def test_validation_failure_diagnostic_is_redacted(repo):
+    plan = _scratch_plan(repo, PLAN_VALIDATION_ONLY)
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_failing("Authorization: Bearer supersecret-token")])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
+    )
+    assert result.status == "awaiting_user"
+    assert "[REDACTED]" in (result.diagnostic or "")
+    assert "supersecret-token" not in (result.diagnostic or "")
+
+
 def test_precommit_hook_failure_routes_to_fix_loop(repo):
     """Install a hook that fails the first commit attempt and passes the second.
 
@@ -744,6 +763,42 @@ def test_precommit_hook_failure_routes_to_fix_loop(repo):
     assert "phase 1" in log
     impl_calls = [c for c in spawner.calls if c.role == "implementer"]
     assert any("hook says no" in c.test_failures for c in impl_calls)
+
+
+def test_boundary_commit_failure_diagnostic_is_redacted(repo):
+    hooks_dir = repo / ".git" / "hooks"
+    hook = hooks_dir / "pre-commit"
+    hook.write_text(
+        textwrap.dedent(
+            """\
+            #!/bin/sh
+            echo "Authorization: Bearer hook-secret" >&2
+            exit 1
+            """
+        )
+    )
+    hook.chmod(0o755)
+
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    spawner = StubSpawner(repo)
+
+    def attempt(req, r):
+        _stage(r, "src/a.py", f"v={req.iteration}\n")
+        return _impl_report(req.iteration, ["src/a.py"])
+
+    for i in range(4):
+        spawner.script("implementer", i, attempt)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing(), _passing(), _passing(), _passing()])
+
+    result = conduct(
+        ConductOptions(
+            plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner, max_iterations=3
+        )
+    )
+    assert result.status == "blocked"
+    assert "[REDACTED]" in (result.diagnostic or "")
+    assert "hook-secret" not in (result.diagnostic or "")
 
 
 def test_precommit_hook_restage_retry_succeeds_without_respawn(repo):
@@ -850,8 +905,55 @@ def test_pause_phase_stashes_and_marks_state(repo):
     assert result.status == "paused"
     state = json.loads(state_file.read_text())
     assert state["status"] == "paused"
+    assert state["paused_stash_rev"]
     stash = _git(["stash", "list"], repo).stdout
     assert "conduct-pause-phase" in stash
+
+
+def test_resume_restores_paused_stash_before_continuing(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    state_dir = repo / ".conduct"
+    state_dir.mkdir()
+    state_file = _state_file(repo, plan)
+    state_file.write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "plan_path": str(plan),
+                "plan_content_hash": compute_plan_hash(plan),
+                "base_sha": _git(["rev-parse", "HEAD"], repo).stdout.strip(),
+                "phase_index": 0,
+                "current_phase_title": "Add a file",
+                "completed_phases": [],
+                "last_summary": "",
+                "iteration_count": 0,
+                "status": "running",
+                "blocker": None,
+                "paused_stash_rev": None,
+            }
+        )
+    )
+    (repo / "scratch.txt").write_text("paused work\n")
+    paused = pause_phase(ConductOptions(plan_path=plan, repo_root=repo, spawn=lambda r: ""))
+    assert paused.status == "paused"
+
+    spawner = StubSpawner(repo)
+
+    def impl(req, r):
+        assert (r / "scratch.txt").read_text() == "paused work\n"
+        _stage(r, "src/a.py", "x=1\n")
+        return _impl_report(0, ["src/a.py"])
+
+    spawner.script("implementer", 0, impl)
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    resumed = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner, resume=True)
+    )
+    assert resumed.status == "awaiting_user"
+    assert (repo / "scratch.txt").read_text() == "paused work\n"
+    assert "conduct-pause-phase" not in _git(["stash", "list"], repo).stdout
 
 
 def test_abort_run_deletes_state_without_touching_tree(repo):
@@ -1398,9 +1500,9 @@ def test_default_lint_check_returns_none_on_passing_check(tmp_path, monkeypatch)
     assert default_lint_check(tmp_path) is None
 
 
-def test_run_preflight_invokes_default_lint_check_when_no_override(repo, monkeypatch):
-    """End-to-end: preflight without a stub uses default_lint_check, which
-    detects the seeded Makefile lint failure and hard-stops before any spawn.
+def test_run_preflight_does_not_invoke_default_lint_check_implicitly(repo, monkeypatch):
+    """Security hardening: preflight should not execute repo-defined lint
+    entrypoints unless the caller explicitly opts in via lint_check.
     """
     if shutil.which("make") is None:
         pytest.skip("make not available")
@@ -1410,14 +1512,19 @@ def test_run_preflight_invokes_default_lint_check_when_no_override(repo, monkeyp
     )
     monkeypatch.setattr("conduct.conductor.shutil.which", _which_stub({"make"}))
     spawner = StubSpawner(repo)
-    runner = StubTestRunner()
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/a.py", "x=1\n"), _impl_report(0, ["src/a.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
 
     result = conduct(
         ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner)
     )
-    assert result.status == "preflight_fail"
-    assert "preflight diagnostic seeded" in result.diagnostic
-    assert spawner.calls == []
+    assert result.status == "awaiting_user"
+    assert spawner.calls
 
 
 def test_phase_with_no_slot_falls_back_to_repo_default(repo):
@@ -1524,6 +1631,7 @@ def test_state_file_includes_documented_contract_keys(repo):
     state_path = _state_file(repo, plan)
     state = json.loads(state_path.read_text())
     assert {
+        "schema_version",
         "plan_path",
         "plan_content_hash",
         "base_sha",
@@ -1534,9 +1642,91 @@ def test_state_file_includes_documented_contract_keys(repo):
         "iteration_count",
         "status",
         "blocker",
+        "paused_stash_rev",
     }.issubset(state)
+    assert state["schema_version"] == 2
     assert state["plan_content_hash"] == compute_plan_hash(plan)
     assert state["last_summary"] == result.summary
+
+
+def test_resume_migrates_legacy_state_file_without_schema_version(repo):
+    plan = _scratch_plan(repo, PLAN_TWO_PHASES)
+    state_path = _state_file(repo, plan)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "plan_path": str(plan),
+                "plan_content_hash": compute_plan_hash(plan),
+                "base_sha": _git(["rev-parse", "HEAD"], repo).stdout.strip(),
+                "phase_index": 1,
+                "current_phase_title": "First",
+                "completed_phases": [
+                    {
+                        "index": 0,
+                        "label": "1",
+                        "title": "First",
+                        "commit_sha": _git(["rev-parse", "HEAD"], repo).stdout.strip(),
+                        "tests": "passed",
+                        "iterations": 0,
+                    }
+                ],
+                "last_summary": "",
+                "iteration_count": 0,
+                "status": "awaiting_user",
+                "blocker": None,
+            }
+        )
+    )
+    spawner = StubSpawner(repo)
+    spawner.script(
+        "implementer",
+        0,
+        lambda req, r: (_stage(r, "src/b.py", "y=2\n"), _impl_report(0, ["src/b.py"]))[1],
+    )
+    spawner.script("test-writer", 0, lambda req, r: _test_report())
+    runner = StubTestRunner(queue=[_passing()])
+
+    result = conduct(
+        ConductOptions(plan_path=plan, repo_root=repo, spawn=spawner, test_runner=runner, resume=True)
+    )
+    assert result.status == "awaiting_user"
+    migrated = json.loads(state_path.read_text())
+    assert migrated["schema_version"] == 2
+    assert "paused_stash_rev" in migrated
+
+
+def test_resume_blocks_legacy_paused_state_without_stash_metadata(repo):
+    plan = _scratch_plan(repo, PLAN_ONE_PHASE)
+    state_path = _state_file(repo, plan)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps(
+            {
+                "plan_path": str(plan),
+                "plan_content_hash": compute_plan_hash(plan),
+                "base_sha": _git(["rev-parse", "HEAD"], repo).stdout.strip(),
+                "phase_index": 0,
+                "current_phase_title": "Add a file",
+                "completed_phases": [],
+                "last_summary": "",
+                "iteration_count": 0,
+                "status": "paused",
+                "blocker": None,
+            }
+        )
+    )
+    result = conduct(
+        ConductOptions(
+            plan_path=plan,
+            repo_root=repo,
+            spawn=StubSpawner(repo),
+            test_runner=StubTestRunner(),
+            resume=True,
+        )
+    )
+    assert result.status == "blocked"
+    assert "missing stash metadata" in result.summary
 
 
 def test_delegation_unavailable_result_hard_stops_with_clear_message():

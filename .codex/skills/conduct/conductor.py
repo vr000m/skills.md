@@ -109,6 +109,9 @@ class UnsafeConductPathError(RuntimeError):
     pass
 
 
+STATE_SCHEMA_VERSION = 2
+
+
 def delegation_unavailable_result(plan_path: str | Path) -> ConductResult:
     """Hard-stop result for runtimes that cannot delegate phase workers."""
     return ConductResult(
@@ -184,6 +187,10 @@ def _summarize_failure_output(output: str, *, max_chars: int = 1200, max_lines: 
     return redacted or "(no output captured)"
 
 
+def _diagnostic_tail(output: str, *, max_chars: int = 2000) -> str:
+    return _summarize_failure_output(output, max_chars=max_chars, max_lines=40)
+
+
 # ---------------------------------------------------------------------------
 # Preflight
 # ---------------------------------------------------------------------------
@@ -216,8 +223,7 @@ def run_preflight(opts: ConductOptions) -> Optional[ConductResult]:
             diagnostic=f"Run: /review-plan {opts.plan_path}",
         )
 
-    lint_check = opts.lint_check or (lambda: default_lint_check(opts.repo_root))
-    lint_diag = lint_check()
+    lint_diag = opts.lint_check() if opts.lint_check is not None else None
     if lint_diag:
         return ConductResult(
             status="preflight_fail",
@@ -225,7 +231,7 @@ def run_preflight(opts: ConductOptions) -> Optional[ConductResult]:
             summary="pre-existing lint failure",
             diagnostic=(
                 "Tree has pre-existing lint/hook failures; fix them before running this skill\n"
-                + lint_diag
+                + _diagnostic_tail(lint_diag)
             ),
         )
     return None
@@ -290,6 +296,20 @@ def _conduct_path_result(status: str, summary: str, path: Path) -> ConductResult
     )
 
 
+def _validate_state_shape(state: dict) -> dict:
+    if not isinstance(state.get("schema_version"), int):
+        raise UnsafeConductPathError("invalid conduct state: schema_version must be an int")
+    if not isinstance(state.get("completed_phases"), list):
+        raise UnsafeConductPathError("invalid conduct state: completed_phases must be a list")
+    if "paused_stash_rev" in state and state["paused_stash_rev"] is not None and not isinstance(
+        state["paused_stash_rev"], str
+    ):
+        raise UnsafeConductPathError("invalid conduct state: paused_stash_rev must be a string")
+    if not isinstance(state.get("phase_index"), int):
+        raise UnsafeConductPathError("invalid conduct state: phase_index must be an int")
+    return state
+
+
 def _normalize_loaded_state(state: dict) -> dict:
     normalized = dict(state)
     normalized.setdefault("phase_index", len(normalized.get("completed_phases") or []))
@@ -299,11 +319,31 @@ def _normalize_loaded_state(state: dict) -> dict:
     normalized.setdefault("iteration_count", 0)
     normalized.setdefault("status", "running")
     normalized.setdefault("blocker", None)
-    return normalized
+    normalized.setdefault("paused_stash_rev", None)
+    normalized["schema_version"] = STATE_SCHEMA_VERSION
+    return _validate_state_shape(normalized)
+
+
+def _migrate_loaded_state(state: dict) -> dict:
+    version = state.get("schema_version", 0)
+    if not isinstance(version, int):
+        raise UnsafeConductPathError("invalid conduct state: schema_version must be an int")
+    if version > STATE_SCHEMA_VERSION:
+        raise UnsafeConductPathError(
+            f"unsupported conduct state schema_version: {version}"
+        )
+    migrated = dict(state)
+    if version < 1:
+        migrated["schema_version"] = 1
+    if version < 2:
+        migrated.setdefault("paused_stash_rev", None)
+        migrated["schema_version"] = 2
+    return migrated
 
 
 def _init_state(opts: ConductOptions, plan_hash: str) -> dict:
     return {
+        "schema_version": STATE_SCHEMA_VERSION,
         "plan_path": str(opts.plan_path),
         "plan_content_hash": plan_hash,
         "base_sha": _head_sha(opts.repo_root),
@@ -314,13 +354,14 @@ def _init_state(opts: ConductOptions, plan_hash: str) -> dict:
         "iteration_count": 0,
         "status": "running",
         "blocker": None,
+        "paused_stash_rev": None,
     }
 
 
 def _load_or_init_state(opts: ConductOptions, plan_hash: str) -> tuple[dict, bool]:
     sp = _state_path(opts)
     if sp.exists():
-        state = _normalize_loaded_state(json.loads(sp.read_text()))
+        state = _normalize_loaded_state(_migrate_loaded_state(json.loads(sp.read_text())))
         return state, True
     return _init_state(opts, plan_hash), False
 
@@ -376,6 +417,57 @@ def _persist_state(opts: ConductOptions, state: dict) -> None:
     _safe_write_text(sp, json.dumps(state, indent=2))
 
 
+def _latest_stash_rev(repo_root: Path) -> str | None:
+    proc = _git(["stash", "list", "--format=%H", "-1"], repo_root, check=False)
+    rev = proc.stdout.strip()
+    return rev or None
+
+
+def _stash_ref_for_rev(repo_root: Path, rev: str) -> str | None:
+    proc = _git(["stash", "list", "--format=%gd%x00%H"], repo_root, check=False)
+    for line in proc.stdout.splitlines():
+        if not line:
+            continue
+        ref, _, sha = line.partition("\x00")
+        if sha.strip() == rev:
+            return ref.strip()
+    return None
+
+
+def _restore_paused_stash(opts: ConductOptions, state: dict) -> Optional[ConductResult]:
+    if state.get("status") != "paused":
+        return None
+    stash_rev = state.get("paused_stash_rev")
+    if stash_rev == "":
+        return None
+    if stash_rev is None:
+        return ConductResult(
+            status="blocked",
+            state=state,
+            summary="paused run missing stash metadata",
+            diagnostic="Restore the paused stash manually or abort the run.",
+        )
+    stash_ref = _stash_ref_for_rev(opts.repo_root, stash_rev)
+    if stash_ref is None:
+        return ConductResult(
+            status="blocked",
+            state=state,
+            summary="paused stash is no longer available",
+            diagnostic=f"Missing stash rev: {stash_rev}",
+        )
+    apply_proc = _git(["stash", "apply", "--index", stash_ref], opts.repo_root, check=False)
+    if apply_proc.returncode != 0:
+        return ConductResult(
+            status="blocked",
+            state=state,
+            summary="failed to restore paused stash",
+            diagnostic=_diagnostic_tail((apply_proc.stdout or "") + (apply_proc.stderr or "")),
+        )
+    _git(["stash", "drop", stash_ref], opts.repo_root, check=False)
+    state["paused_stash_rev"] = None
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Per-phase
 # ---------------------------------------------------------------------------
@@ -412,7 +504,7 @@ def _run_validation_if_present(
             status="awaiting_user",
             state=state,
             summary=state["blocker"],
-            diagnostic=validation.output[-2000:],
+            diagnostic=_diagnostic_tail(validation.output),
         )
     warnings.append("validation passed")
     return None
@@ -725,7 +817,7 @@ def _run_phase(
                 status="blocked",
                 state=state,
                 summary=state["blocker"],
-                diagnostic=result.output[-2000:],
+                diagnostic=_diagnostic_tail(result.output),
             )
 
         # Capture staged diff, reset index, then choose respawn role.
@@ -824,12 +916,12 @@ def _commit_phase(
                     state=state,
                     summary=state["blocker"],
                     next_command=f"Run: /conduct --resume {opts.plan_path}",
-                    diagnostic=(
+                    diagnostic=_diagnostic_tail(
                         "Modified tracked files after failed commit:\n"
                         + "\n".join(modified_paths)
                         + "\n\nOriginally staged files:\n"
                         + "\n".join(staged_paths or ["<none>"])
-                    )[-2000:],
+                    ),
                 )
     if proc.returncode != 0:
         # Pre-commit hook failure → route into fix loop.
@@ -846,7 +938,7 @@ def _commit_phase(
                 status="blocked",
                 state=state,
                 summary=state["blocker"],
-                diagnostic=(proc.stdout + proc.stderr)[-2000:],
+                diagnostic=_diagnostic_tail((proc.stdout or "") + (proc.stderr or "")),
             )
         # Signal the caller to re-enter the loop. We do this by returning a
         # special marker the caller checks. But simpler: raise a sentinel.
@@ -920,10 +1012,6 @@ def conduct(opts: ConductOptions) -> ConductResult:
     Mirrors SKILL.md Step 9: every phase boundary returns control to the user.
     Tests drive multi-phase runs by re-invoking with ``resume=True``.
     """
-    pre = run_preflight(opts)
-    if pre is not None:
-        return pre
-
     sp = _state_path(opts)
     try:
         _ensure_safe_conduct_dir(opts.repo_root)
@@ -932,15 +1020,39 @@ def conduct(opts: ConductOptions) -> ConductResult:
         return _conduct_path_result("preflight_fail", "unsafe conduct state path", sp)
     lock = StateLock(str(sp.with_suffix(sp.suffix + ".lock")))
     with lock:
-        plan_hash = compute_plan_hash(opts.plan_path)
-        state, state_exists = _load_or_init_state(opts, plan_hash)
-        if state_exists and not _state_matches_plan(state, opts, plan_hash):
-            return _state_mismatch_result(opts, state, plan_hash)
+        if sp.exists():
+            state = _normalize_loaded_state(_migrate_loaded_state(json.loads(sp.read_text())))
+            state_exists = True
+        else:
+            state = {}
+            state_exists = False
         if state_exists and not opts.resume:
+            if state.get("status") == "paused" and not opts.plan_path.exists():
+                return _resume_required_result(opts, state)
+            pre = run_preflight(opts)
+            if pre is not None:
+                return pre
+            plan_hash = compute_plan_hash(opts.plan_path)
+            if not _state_matches_plan(state, opts, plan_hash):
+                return _state_mismatch_result(opts, state, plan_hash)
             return _resume_required_result(opts, state)
         if state_exists and opts.resume:
+            restore_result = _restore_paused_stash(opts, state)
+            if restore_result is not None:
+                return restore_result
+        pre = run_preflight(opts)
+        if pre is not None:
+            return pre
+
+        plan_hash = compute_plan_hash(opts.plan_path)
+        if state_exists and not _state_matches_plan(state, opts, plan_hash):
+            return _state_mismatch_result(opts, state, plan_hash)
+        if not state_exists:
+            state = _init_state(opts, plan_hash)
+        elif opts.resume:
             state["resume_base_sha"] = _head_sha(opts.repo_root)
             state["status"] = "running"
+            _persist_state(opts, state)
 
         plan_text = opts.plan_path.read_text()
         phases = [p for p in parse_phases(plan_text) if not p.is_complete]
@@ -1100,8 +1212,22 @@ def pause_phase(opts: ConductOptions) -> ConductResult:
         state = json.loads(sp.read_text())
         label = state.get("current_phase_title", "?")
         msg = f"conduct-pause-phase-{label}"
-        _git(["stash", "push", "-u", "-m", msg], opts.repo_root, check=False)
+        before_stash_rev = _latest_stash_rev(opts.repo_root)
+        stash_proc = _git(
+            ["stash", "push", "-u", "-m", msg, "--", ".", ":(exclude).conduct"],
+            opts.repo_root,
+            check=False,
+        )
+        if stash_proc.returncode != 0:
+            return ConductResult(
+                status="blocked",
+                state=state,
+                summary="failed to stash paused phase work",
+                diagnostic=_diagnostic_tail((stash_proc.stdout or "") + (stash_proc.stderr or "")),
+            )
         state["status"] = "paused"
+        after_stash_rev = _latest_stash_rev(opts.repo_root)
+        state["paused_stash_rev"] = after_stash_rev if after_stash_rev != before_stash_rev else ""
         _persist_state(opts, state)
         return ConductResult(status="paused", state=state, summary=f"paused: {msg}")
 

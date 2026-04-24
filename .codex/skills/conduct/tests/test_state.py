@@ -20,6 +20,7 @@ from conduct.lock import STALE_SECONDS, LockError, StateLock, lock_is_held, main
 
 
 STATE_REQUIRED_KEYS = {
+    "schema_version",
     "plan_path",
     "plan_content_hash",
     "base_sha",
@@ -30,11 +31,13 @@ STATE_REQUIRED_KEYS = {
     "iteration_count",
     "status",
     "blocker",
+    "paused_stash_rev",
 }
 
 
 def test_state_schema_round_trip(tmp_path: Path):
     state = {
+        "schema_version": 2,
         "plan_path": "docs/dev_plans/example.md",
         "plan_content_hash": "a" * 40,
         "base_sha": "b" * 40,
@@ -54,6 +57,7 @@ def test_state_schema_round_trip(tmp_path: Path):
         "iteration_count": 0,
         "status": "awaiting_user",
         "blocker": None,
+        "paused_stash_rev": None,
     }
     assert STATE_REQUIRED_KEYS.issubset(state.keys())
     path = tmp_path / "state.json"

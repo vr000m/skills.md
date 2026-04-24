@@ -58,7 +58,7 @@ conduct --abort-run <plan-path>
 |------|---------|
 | `--resume` | Resume after a handback. Reads state, picks up at the next unfinished phase. |
 | `--status` | Print the state file contents and exit. No git ops. |
-| `--pause-phase` | `git stash push -u -m "conduct-pause-phase-<N>"`, mark phase as user-paused, exit. State lives; `--resume` picks up. |
+| `--pause-phase` | `git stash push -u -m "conduct-pause-phase-<N>"`, record the created stash in state, mark phase as user-paused, exit. `--resume` restores that recorded stash before continuing. |
 | `--abort-run` | Delete the state file for this plan once the state lock is free. If another `/conduct` run is active, exit non-destructively and tell the user to retry. No git ops, no stash. |
 | `--test-cmd CMD` | Override the phase's `Test command:` slot and any repo default. |
 | `--test-timeout SECS` | Wall-clock cap on the test-runner subprocess. Default 300. |
@@ -86,17 +86,15 @@ The plan MUST end with a trailing marker footer written by `/review-plan` after 
 - Recompute the plan's content hash: take the plan with its final line removed if that final line matched the marker regex (otherwise the plan as-is), write to a temp file, run `git hash-object <tmpfile>`. Compare to the SHA recorded in the marker.
 - If marker absent OR hash mismatches → hard-stop with: `Run: /review-plan <plan-path>` and exit.
 
-### 3. Pre-commit health check
+### 3. Optional pre-commit health check
 
-Run the repo's pre-commit / lint in non-fix mode on the current tree, in this order: `pre-commit run --all-files`, then `make lint`, then `npm run lint`, then `ruff check .`. If none exist, skip. If the check fails → hard-stop with: `Tree has pre-existing lint/hook failures; fix them before running this skill`.
-
-This prevents subagent fix-loops from chasing issues they didn't introduce.
+Preflight does **not** automatically execute repo-defined lint entrypoints. If the caller explicitly supplies a lint/preflight check, run it and hard-stop on failure with: `Tree has pre-existing lint/hook failures; fix them before running this skill`.
 
 ### 4. State file load
 
 `<repo-root>/.conduct/state-<plan-id>.json`, where repo-root comes from `git rev-parse --show-toplevel` and `plan-id` is the plan basename plus a short hash of its repo-relative path.
 
-- If present and `--resume`: load only when both `state.plan_path` and `state.plan_content_hash` still match the current reviewed plan. On match, continue from `phase_index` and refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
+- If present and `--resume`: load only when both `state.plan_path` and `state.plan_content_hash` still match the current reviewed plan. Migrate/validate the stored state shape first. On match, restore any recorded paused stash, continue from `phase_index`, and refresh `state.resume_base_sha = git rev-parse HEAD` so the rogue-commit check (Step 8) treats any user commits made during handback as the new phase baseline rather than as subagent commits.
 - If present and the stored plan path/hash do not match the current reviewed plan: hard-stop and tell the user to `--abort-run` before starting over.
 - If present without `--resume`: warn, print state summary, suggest `--resume` or `--abort-run`, exit without entering the phase loop.
 - If absent: initialise with `plan_content_hash = compute_plan_hash(plan)`, `base_sha = git rev-parse HEAD`, `phase_index = 0`, `current_phase_title = ""`, `last_summary = ""`, `iteration_count = 0`, `status = "running"`.
@@ -250,6 +248,7 @@ Schema:
 
 ```json
 {
+  "schema_version": 2,
   "plan_path": "docs/dev_plans/20260422-feature-conduct-skill.md",
   "plan_content_hash": "<sha1 of plan with marker stripped>",
   "base_sha": "<git sha before phase 1>",
@@ -262,7 +261,8 @@ Schema:
   "last_summary": "...",
   "iteration_count": 0,
   "status": "awaiting_user | running | paused | blocked | schema_error | complete",
-  "blocker": null
+  "blocker": null,
+  "paused_stash_rev": "<stash commit sha recorded by --pause-phase, or null>"
 }
 ```
 
