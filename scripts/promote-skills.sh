@@ -43,16 +43,18 @@ for skill in "${managed_skills[@]}"; do
 	rsync -a --delete "$ROOT_DIR/.claude/skills/$skill/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
 done
 
-for skill in "${claude_only_skills[@]}"; do
-	src="$ROOT_DIR/.claude/skills/$skill"
-	if [[ ! -d "$src" ]]; then
-		echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
-		continue
-	fi
-	mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
-	rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
-	echo "Promoted Claude-only skill: $skill"
-done
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	for skill in "${claude_only_skills[@]}"; do
+		src="$ROOT_DIR/.claude/skills/$skill"
+		if [[ ! -d "$src" ]]; then
+			echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
+			continue
+		fi
+		mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
+		rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+		echo "Promoted Claude-only skill: $skill"
+	done
+fi
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	copy_reference_files_to_global

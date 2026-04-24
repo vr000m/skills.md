@@ -46,17 +46,19 @@ claude_only_skills=()
 if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
 	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 fi
-for skill in "${claude_only_skills[@]}"; do
-	if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
-		echo "skip: .claude/skills/$skill global dir not yet bootstrapped (run promote-skills or bootstrap-skills)"
-	elif [[ ! -d "$ROOT_DIR/.claude/skills/$skill" ]]; then
-		echo "drift: .claude/skills/$skill missing from repo but exists globally"
-		CLAUDE_DIFF=1
-	elif ! diff -ru "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" "$ROOT_DIR/.claude/skills/$skill" >/dev/null; then
-		echo "drift: .claude/skills/$skill differs from global authority"
-		CLAUDE_DIFF=1
-	fi
-done
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	for skill in "${claude_only_skills[@]}"; do
+		if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
+			echo "skip: .claude/skills/$skill global dir not yet bootstrapped (run promote-skills or bootstrap-skills)"
+		elif [[ ! -d "$ROOT_DIR/.claude/skills/$skill" ]]; then
+			echo "drift: .claude/skills/$skill missing from repo but exists globally"
+			CLAUDE_DIFF=1
+		elif ! diff -ru "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" "$ROOT_DIR/.claude/skills/$skill" >/dev/null; then
+			echo "drift: .claude/skills/$skill differs from global authority"
+			CLAUDE_DIFF=1
+		fi
+	done
+fi
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	CANONICAL_REFERENCES_DIR="$ROOT_DIR/.codex/skills/content-review/references"

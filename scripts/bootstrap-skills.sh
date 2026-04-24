@@ -80,20 +80,22 @@ claude_only_skills=()
 if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
 	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 fi
-for skill in "${claude_only_skills[@]}"; do
-	src="$ROOT_DIR/.claude/skills/$skill"
-	if [[ ! -d "$src" ]]; then
-		echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
-		continue
-	fi
-	mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
-	if [[ "$force_overwrite" -eq 0 && -n "$(find "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
-		echo "skip: $GLOBAL_CLAUDE_SKILLS_DIR/$skill already has content (use --force to overwrite)"
-	else
-		rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
-		echo "Installed Claude-only skill: $skill"
-	fi
-done
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	for skill in "${claude_only_skills[@]}"; do
+		src="$ROOT_DIR/.claude/skills/$skill"
+		if [[ ! -d "$src" ]]; then
+			echo "warn: Claude-only skill $skill missing at $src, skipping" >&2
+			continue
+		fi
+		mkdir -p "$GLOBAL_CLAUDE_SKILLS_DIR/$skill"
+		if [[ "$force_overwrite" -eq 0 && -n "$(find "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" -mindepth 1 -print -quit 2>/dev/null)" ]]; then
+			echo "skip: $GLOBAL_CLAUDE_SKILLS_DIR/$skill already has content (use --force to overwrite)"
+		else
+			rsync -a --delete "$src/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
+			echo "Installed Claude-only skill: $skill"
+		fi
+	done
+fi
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	copy_reference_files_to_global

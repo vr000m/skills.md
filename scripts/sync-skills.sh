@@ -91,13 +91,15 @@ claude_only_skills=()
 if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
 	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 fi
-for skill in "${claude_only_skills[@]}"; do
-	if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
-		echo "skip: $skill not found in global claude dir (run promote-skills or bootstrap-skills to seed it)"
-		continue
-	fi
-	sync_skill "$GLOBAL_CLAUDE_SKILLS_DIR" "$REPO_CLAUDE_DIR" "$skill"
-done
+if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+	for skill in "${claude_only_skills[@]}"; do
+		if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
+			echo "skip: $skill not found in global claude dir (run promote-skills or bootstrap-skills to seed it)"
+			continue
+		fi
+		sync_skill "$GLOBAL_CLAUDE_SKILLS_DIR" "$REPO_CLAUDE_DIR" "$skill"
+	done
+fi
 
 if [[ " $MANAGED_SKILLS " == *" content-review "* ]]; then
 	sync_repo_reference_copies
