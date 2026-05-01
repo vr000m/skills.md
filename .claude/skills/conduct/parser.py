@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from marker import _last_marker_index
+from marker import last_marker_index
 
 PHASE_HEADING_RE = re.compile(
     r"^###\s+Phase\s+(\S+?)\s*[:—–]\s*(.+?)\s*(\([^)]*\))?\s*$"
@@ -95,7 +95,7 @@ def parse_progress(plan_text: str) -> dict[str, bool] | None:
     lines = plan_text.splitlines()
     # Scan only below the (real) marker line so a stray ``## Progress`` placed
     # above the marker — where edits would bust the hash — does not bind.
-    marker_idx = _last_marker_index(lines)
+    marker_idx = last_marker_index(lines)
     scan_start = marker_idx + 1 if marker_idx is not None else 0
     try:
         start = next(

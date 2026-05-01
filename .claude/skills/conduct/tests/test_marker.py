@@ -152,7 +152,8 @@ def test_write_marker_replaces_template_placeholder(tmp_path: Path):
     text = plan_path.read_text()
 
     assert "<!-- reviewed: YYYY-MM-DD @ <hash> -->" not in text
-    assert read_marker(plan_path) == (read_marker(plan_path)[0], sha)
+    iso, recorded_sha = read_marker(plan_path)
+    assert recorded_sha == sha
     assert text.index("<!-- reviewed:") < text.index("## Progress")
     assert marker_is_stale(plan_path) is False
 
