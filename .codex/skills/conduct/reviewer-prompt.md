@@ -5,7 +5,7 @@ Filled by the conductor when a phase qualifies for an optional mid-phase lightwe
 Placeholders: `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_LABEL}}`, `{{PHASE_TITLE}}`, `{{DIFF}}`.
 
 - `{{PHASE_INDEX}}` is the 0-based document-order position. Emit it as `phase_position`.
-- `{{PHASE_LABEL}}` is the verbatim label from the `### Phase N:` heading. Emit it as `phase_label`.
+- `{{PHASE_LABEL}}` is the verbatim label from the `### Phase N` heading (separator may be `:`, `—`, or `–`). Emit it as `phase_label`.
 - `{{DIFF}}` is the staged diff for this phase.
 
 ---

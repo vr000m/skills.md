@@ -5,7 +5,7 @@ Filled by the conductor before spawning each implementer. The filled prompt is p
 Placeholders: `{{PLAN_PATH}}`, `{{PHASE_INDEX}}`, `{{PHASE_LABEL}}`, `{{PHASE_TITLE}}`, `{{ITERATION}}`, `{{BASE_SHA}}`, `{{PRIOR_DIFF}}`, `{{TEST_FAILURES}}`.
 
 - `{{PHASE_INDEX}}` is the 0-based document-order position. Emit it as `phase_position` in the JSON report.
-- `{{PHASE_LABEL}}` is the verbatim label from the `### Phase N:` heading (e.g. `3` or `3a`). Emit it as `phase_label`.
+- `{{PHASE_LABEL}}` is the verbatim label from the `### Phase N` heading (separator may be `:`, `—`, or `–`; e.g. `3` or `3a`). Emit it as `phase_label`.
 - On the first attempt, `{{ITERATION}}` is `0` and both `{{PRIOR_DIFF}}` and `{{TEST_FAILURES}}` are empty.
 - On fix-loop iterations, `{{ITERATION}}` is `1`, `2`, or `3`, `{{PRIOR_DIFF}}` contains the staged diff from the previous attempt, and `{{TEST_FAILURES}}` contains either the test-runner output or the pre-commit-hook output from the failed boundary commit.
 
