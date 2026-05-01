@@ -66,14 +66,16 @@ Before any phase runs, validate:
 
 ### 2. Review marker check
 
-The plan MUST end with a trailing marker footer written by `/review-plan` after user acceptance:
+The plan MUST contain a marker line written by `/review-plan` after user acceptance:
 
 ```
 <!-- reviewed: YYYY-MM-DD @ <sha1> -->
 ```
 
-- Only the final non-empty line is checked, matched against regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. Marker-shaped text elsewhere in the plan (inside prose or code fences) is ignored.
-- Recompute the plan's content hash: take the plan with its final line removed if that final line matched the marker regex (otherwise the plan as-is), write to a temp file, run `git hash-object <tmpfile>`. Compare to the SHA recorded in the marker.
+The marker acts as a **contract / workspace divider**. Everything above the marker is the immutable contract (objective, requirements, phase blocks, technical specs). Everything below is workspace — `## Progress` (per-phase completion), `## Findings` (durable notes), and similar. The hash covers the contract only, so editing the workspace during a run does NOT invalidate the marker.
+
+- Match against regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. The last unfenced, column-zero match wins; marker-shaped text inside fenced code blocks or indented prose is ignored.
+- Recompute the plan's content hash: take the plan with the marker line and everything after it stripped, pipe to `git hash-object --stdin`. Compare to the SHA recorded in the marker.
 - If marker absent OR hash mismatches → hard-stop with: `Run: /review-plan <plan-path>` and exit.
 
 ### 3. Pre-commit health check
@@ -100,7 +102,9 @@ Parse phases from the `## Implementation Checklist` section with regex:
 ^###\s+Phase\s+(\S+?)\s*[:—–]\s*(.+?)\s*(\([^)]*\))?\s*$
 ```
 
-Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthesised annotations. The label/title separator may be a colon (`:`), em-dash (`—`), or en-dash (`–`) — LLM-authored plans often default to em-dash, so the parser tolerates all three rather than forcing a manual rewrite. Skip phases whose task checkboxes are all `- [x]`. Record each phase's 0-based document position (used as `phase_position` in reports) and verbatim label (used as `phase_label`).
+Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthesised annotations. The label/title separator may be a colon (`:`), em-dash (`—`), or en-dash (`–`) — LLM-authored plans often default to em-dash, so the parser tolerates all three rather than forcing a manual rewrite. Record each phase's 0-based document position (used as `phase_position` in reports) and verbatim label (used as `phase_label`).
+
+Phase completion is sourced from the `## Progress` section below the marker. Each entry has the form `- [ ] Phase <label>: <title>` (or `- [x] ...` when done). The conductor reads this section to skip phases that have already finished. Old-format plans without a Progress section fall back to in-body checkbox state for backward compatibility.
 
 ## Per-Phase Workflow
 
@@ -286,6 +290,6 @@ If you need a stronger guarantee, review the phase `Test command:` lines before 
 
 ## Integration Points
 
-- **Plan format**: `/dev-plan` owns the template. Phases need `**Impl files:**`, `**Test files:**`, and `` **Test command:** `<cmd>` `` slots.
-- **Review marker**: `/review-plan` writes the marker footer after user acceptance. This skill consumes it as the readiness signal.
+- **Plan format**: `/dev-plan` owns the template. Phases need `**Impl files:**`, `**Test files:**`, and `` **Test command:** `<cmd>` `` slots in the contract section above the marker. Per-phase progress lives in a `## Progress` section below the marker.
+- **Review marker**: `/review-plan` writes the marker line after user acceptance. The marker divides the plan into immutable contract (above, hashed) and editable workspace (below, not hashed). This skill consumes the marker as the readiness signal.
 - **Fan-out**: a `/fan-out`-spawned Claude subprocess may invoke `/conduct` as its top-level skill; `/conduct` itself does not fan out.

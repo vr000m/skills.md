@@ -175,17 +175,37 @@ def test_preflight_full_composition_happy_path(tmp_path):
 @pytest.mark.parametrize(
     "mutation",
     [
-        lambda t: t + "\nappended trailing prose\n",
         lambda t: t.replace("Phase 1", "Phase one"),
         lambda t: t.replace("- [ ] do the thing", "- [x] do the thing"),
     ],
 )
-def test_preflight_any_body_change_invalidates_marker(tmp_path, mutation):
+def test_preflight_above_marker_change_invalidates_marker(tmp_path, mutation):
+    """Any edit to the contract section (above the marker) must invalidate the
+    marker. The conductor refuses to run on a stale plan and surfaces
+    ``/review-plan`` as the recovery action.
+    """
     plan = _scratch_plan(tmp_path, PHASE_BODY)
     write_marker(plan)
     plan.write_text(mutation(plan.read_text()))
-    # Either outcome means preflight hard-stops:
-    #   - True: marker still present but hash mismatches
-    #   - None: mutation displaced the marker from the final line
-    # Both produce the same user-facing message ("re-run /review-plan").
     assert marker_is_stale(plan) is not False
+
+
+def test_preflight_workspace_edits_below_marker_do_not_invalidate(tmp_path):
+    """Editing the workspace below the marker (``## Progress``, ``## Findings``,
+    appended notes) must NOT invalidate the marker. This is the entire point of
+    moving progress out of the contract: the conductor or the user can tick
+    boxes and append findings during a run without re-running ``/review-plan``.
+    """
+    plan = _scratch_plan(tmp_path, PHASE_BODY)
+    write_marker(plan)
+    text = plan.read_text()
+    workspace = (
+        "\n"
+        "## Progress\n\n"
+        "- [x] Phase 1: First thing\n"
+        "- [ ] Phase 2: Second\n\n"
+        "## Findings\n\n"
+        "- Phase 1 turned up no surprises.\n"
+    )
+    plan.write_text(text + workspace)
+    assert marker_is_stale(plan) is False
