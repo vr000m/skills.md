@@ -47,6 +47,11 @@ def test_phase_heading_em_dash_separator():
     assert m and m.group(1) == "1" and m.group(2) == "Bootstrap"
 
 
+def test_phase_heading_em_dash_no_surrounding_whitespace():
+    m = PHASE_HEADING_RE.match("### Phase 1—Bootstrap")
+    assert m and m.group(1) == "1" and m.group(2) == "Bootstrap"
+
+
 def test_phase_heading_en_dash_separator():
     m = PHASE_HEADING_RE.match("### Phase 2a – Scaffolding (parallel)")
     assert m
