@@ -42,6 +42,24 @@ def test_phase_heading_non_numeric_label():
     assert m and m.group(1) == "alpha"
 
 
+def test_phase_heading_em_dash_separator():
+    m = PHASE_HEADING_RE.match("### Phase 1 — Bootstrap")
+    assert m and m.group(1) == "1" and m.group(2) == "Bootstrap"
+
+
+def test_phase_heading_em_dash_no_surrounding_whitespace():
+    m = PHASE_HEADING_RE.match("### Phase 1—Bootstrap")
+    assert m and m.group(1) == "1" and m.group(2) == "Bootstrap"
+
+
+def test_phase_heading_en_dash_separator():
+    m = PHASE_HEADING_RE.match("### Phase 2a – Scaffolding (parallel)")
+    assert m
+    assert m.group(1) == "2a"
+    assert m.group(2) == "Scaffolding"
+    assert m.group(3) == "(parallel)"
+
+
 def test_phase_heading_rejects_non_heading():
     assert PHASE_HEADING_RE.match("#### Phase 1: too deep") is None
     assert PHASE_HEADING_RE.match("### phase 1: lowercase") is None

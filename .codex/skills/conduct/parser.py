@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 PHASE_HEADING_RE = re.compile(
-    r"^###\s+Phase\s+(\S+)\s*:\s*(.+?)\s*(\([^)]*\))?\s*$"
+    r"^###\s+Phase\s+(\S+?)\s*[:—–]\s*(.+?)\s*(\([^)]*\))?\s*$"
 )
 
 TEST_COMMAND_RE = re.compile(
