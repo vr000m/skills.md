@@ -75,6 +75,7 @@ The plan MUST contain a marker line written by `/review-plan` after user accepta
 The marker acts as a **contract / workspace divider**. Everything above the marker is the immutable contract (objective, requirements, phase blocks, technical specs). Everything below is workspace — `## Progress` (per-phase completion), `## Findings` (durable notes), and similar. The hash covers the contract only, so editing the workspace during a run does NOT invalidate the marker.
 
 - Match against regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. The last unfenced, column-zero match wins; marker-shaped text inside fenced code blocks or indented prose is ignored.
+- The template-placeholder line `<!-- reviewed: YYYY-MM-DD @ <hash> -->` does **not** count as a real marker — a plan that still carries the placeholder is treated as unmarked and rejected. (`/review-plan` consumes the placeholder as the divider on first review and replaces it with the dated marker.)
 - Recompute the plan's content hash: take the plan with the marker line and everything after it stripped, pipe to `git hash-object --stdin`. Compare to the SHA recorded in the marker.
 - If marker absent OR hash mismatches → hard-stop with: `Run: /review-plan <plan-path>` and exit.
 
