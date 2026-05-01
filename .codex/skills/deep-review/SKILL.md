@@ -28,8 +28,10 @@ to delegate further.
    `## Review Focus` section to steer lens prompts.
 2. If the first argument is `--pr` with a number, or a PR URL/number directly, review that PR's
    diff.
-3. If the first argument is `--continue` or `--full`, review the current branch diff.
-4. If no explicit argument is provided, review the current branch diff against the merge base with
+3. If the first argument is `--continue`, follow the continuation rules in
+   [Persisted Run State](#persisted-run-state); the diff range depends on prior state.
+4. If the first argument is `--full`, or no explicit argument is provided, review the current branch
+   diff against the merge base with
    the default branch.
 5. If no target can be resolved, ask the user for a plan path or PR reference.
 
@@ -206,7 +208,8 @@ If the documentation is up to date, say so concisely.
 
 ## Persisted Run State
 
-Store the last run in `.deep-review/latest.json` so `--continue` can rerun only failed lenses.
+Store the last run in `.deep-review/latest.json` so `--continue` can either resume an incomplete
+run or review only commits added since the last completed review.
 
 Suggested schema:
 ```json
@@ -231,13 +234,16 @@ Suggested schema:
 ```
 
 `--continue` rules:
-- If the state file is missing, fall back to `--full`
+- If the state file is missing, warn and fall back to `--full`
 - If `schema_version` is absent or does not match the current expected version (`1`), warn and fall
   back to `--full`
-- If `base_commit`, `head_commit`, `diff_hash`, or `review_focus_hash` no longer match the current
-  target, warn and fall back to `--full`
-- If the snapshot matches, rerun only `timed_out` or `errored` lenses and merge them with the saved
-  findings
+- If `review_focus_hash` no longer matches, warn and fall back to `--full`
+- If stored `head_commit` equals current `HEAD`, resume the incomplete run: rerun only lenses with
+  status `timed_out` or `errored`, reuse completed lens findings, and keep the range
+  `base_commit..head_commit`
+- If stored `head_commit` is an ancestor of current `HEAD`, run an incremental re-review: rerun all
+  lenses over only `<stored.head_commit>..HEAD`, and list prior findings separately for reference
+- If stored `head_commit` is not an ancestor of current `HEAD`, warn and fall back to `--full`
 - `--full` always overwrites the state file
 
 If the target comes from a plan file, keep the plan path in `review_focus_source` and store a
@@ -327,6 +333,48 @@ the accepted changes, then rerun `/deep-review` if the snapshot changed.
 ```
 
 If the review is clean, say so concisely and note any residual risks or lenses that were skipped.
+
+Continuation report format, incremental re-review mode only:
+
+When `--continue` ran in incremental mode because `HEAD` advanced past stored `head_commit`, the
+report header must make the scope explicit and partition new findings from prior findings:
+
+```markdown
+## Deep Review: [target] (continuation)
+
+**Range reviewed this run**: `<short_prev_head>..HEAD` (`<N>` new commits, `<M>` files)
+**Prior run**: `<run_id>` against `<short_prev_head>` - findings listed below for reference, NOT re-checked
+
+### New findings (from this run)
+
+#### Critical
+- **[Category]**: [Finding]
+  - Evidence: [what was found]
+  - Suggestion: [what to change]
+
+#### Important
+- ...
+
+#### Minor
+- ...
+
+### Prior findings (from run `<run_id>`) - verify these are addressed
+- **[Category] [Severity]**: [Finding] at [file:line]
+  - From the prior report; this run did not re-evaluate.
+```
+
+Do not silently re-list prior findings as if they were freshly surfaced.
+
+## Deep Review Rules
+
+- Keep every lens independent.
+- Do not reuse the parent conversation as context for lens agents.
+- If `--continue` is requested, follow the two-mode rule in
+  [Persisted Run State](#persisted-run-state): resume only `timed_out` or `errored` lenses when
+  `HEAD` has not advanced; otherwise re-review the new commit range and list prior findings
+  separately for reference.
+- If `--full` is requested, ignore prior run state and start fresh.
+- Findings must include severity, category, file:line, evidence, and a concrete suggestion.
 
 ## Self-Check Rubric
 
