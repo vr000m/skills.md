@@ -32,11 +32,13 @@ If a plan file is supplied, treat it as the author-supplied review brief. If the
 - Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, `review_focus_hash`, per-lens status, and the findings that were produced.
 - If the state file is missing, or `schema_version` is absent / does not match the current expected version (1), treat `--continue` as `--full` with a warning.
 
-`--continue` has two modes, decided by comparing the stored `head_commit` to the current `HEAD`:
+`--continue` has three modes, decided by comparing the stored `head_commit` to the current `HEAD`:
 
 1. **Resume incomplete run** — when stored `head_commit == HEAD`. Re-run only the lenses with status `failed` or `timed_out`; reuse completed lens findings as-is. Diff range stays `base_commit..head_commit`.
 2. **Incremental re-review** — when stored `head_commit` is an ancestor of `HEAD` (i.e. new commits have landed since the last run, typically fixes for prior findings). Re-run **all** lenses, but only over the new range `<stored.head_commit>..HEAD`. Prior findings are not re-checked; they are listed for reference in the report (see [Present Findings](#5-present-findings)).
-3. **Fall back to `--full`** — when stored `head_commit` is NOT an ancestor of `HEAD` (force-push, rebase, branch switch), or when `review_focus_hash` no longer matches. Warn the user and review the full `merge-base..HEAD` diff.
+3. **Fall back to `--full`** — in any of the following cases. Warn the user and review the full `merge-base..HEAD` diff.
+   - Stored `head_commit` is NOT an ancestor of `HEAD` (force-push, rebase, branch switch).
+   - `review_focus_hash` no longer matches (the plan's `## Review Focus` section changed).
 
 Suggested schema:
 
