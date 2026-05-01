@@ -106,10 +106,10 @@ Acquire an advisory lock on `.conduct/state-<plan-id>.json.lock` before any writ
 Parse phases from the `## Implementation Checklist` section with regex:
 
 ```
-^###\s+Phase\s+(\S+)\s*:\s*(.+?)\s*(\([^)]*\))?\s*$
+^###\s+Phase\s+(\S+?)\s*[:—–]\s*(.+?)\s*(\([^)]*\))?\s*$
 ```
 
-Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthesised annotations. Skip phases whose task checkboxes are all `- [x]`. Record each phase's 0-based document position (used as `phase_position` in reports) and verbatim label (used as `phase_label`).
+Captures the phase label (e.g. `3` or `3a`) and title; strips trailing parenthesised annotations. The label/title separator may be a colon (`:`), em-dash (`—`), or en-dash (`–`) — LLM-authored plans often default to em-dash, so the parser tolerates all three rather than forcing a manual rewrite. Skip phases whose task checkboxes are all `- [x]`. Record each phase's 0-based document position (used as `phase_position` in reports) and verbatim label (used as `phase_label`).
 
 If every unfinished phase omits every contract slot (`Impl files:`, `Test files:`, `Test command:`, `Validation cmd:`), continue in degraded mode but queue a one-shot warning for the first handback: the user should see that they lost parallel spawn and explicit test/validation wiring.
 
