@@ -1,8 +1,8 @@
 """Tests for review-marker hashing and writing.
 
-Covers final-line-only strip semantics (marker-shaped lines in body must NOT
-be stripped), hash idempotency across append-or-replace, and staleness
-detection after a body edit.
+Covers contract/workspace split semantics (marker-shaped lines in body must
+NOT be stripped), hash idempotency across append-or-replace, and staleness
+detection after a contract edit.
 
 Runs ``git hash-object`` via subprocess; skips if git is not available.
 """
@@ -66,6 +66,27 @@ def test_strip_removes_trailing_marker_and_trailing_blanks():
     assert stripped == body
 
 
+def test_strip_removes_marker_and_workspace_below_it():
+    body = "# Plan\n\nsome text\n"
+    marker = "<!-- reviewed: 2026-04-22 @ " + "c" * 40 + " -->"
+    workspace = "\n## Progress\n\n- [x] Phase 1: Done\n"
+    stripped = strip_marker_for_hashing(body + marker + workspace)
+    assert stripped == body
+
+
+def test_strip_ignores_marker_shaped_text_inside_fence():
+    plan = textwrap.dedent(
+        f"""\
+        # Plan
+
+        ```
+        <!-- reviewed: 2026-04-22 @ {'c' * 40} -->
+        ```
+        """
+    )
+    assert strip_marker_for_hashing(plan) == plan
+
+
 @requires_git
 def test_write_marker_idempotent_on_unchanged_plan(tmp_path: Path):
     plan_path = tmp_path / "plan.md"
@@ -76,6 +97,26 @@ def test_write_marker_idempotent_on_unchanged_plan(tmp_path: Path):
     # Running twice must not stack markers — the final-line check gives one.
     lines = plan_path.read_text().splitlines()
     assert sum(1 for line in lines if MARKER_RE.match(line)) == 1
+
+
+@requires_git
+def test_write_marker_preserves_workspace_below_existing_marker(tmp_path: Path):
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# Plan\n\nbody\n")
+    write_marker(plan_path)
+    plan_path.write_text(
+        plan_path.read_text()
+        + "\n## Progress\n\n- [x] Phase 1: Done\n\n## Findings\n\n- Kept.\n"
+    )
+
+    sha1 = compute_plan_hash(plan_path)
+    sha2 = write_marker(plan_path)
+    text = plan_path.read_text()
+
+    assert sha2 == sha1
+    assert "## Progress\n\n- [x] Phase 1: Done" in text
+    assert "## Findings\n\n- Kept." in text
+    assert marker_is_stale(plan_path) is False
 
 
 @requires_git

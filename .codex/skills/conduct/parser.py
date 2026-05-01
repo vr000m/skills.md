@@ -27,7 +27,12 @@ TEST_FILES_RE = re.compile(r"^\*\*Test files:\*\*\s+(.+?)\s*$")
 
 CHECKBOX_RE = re.compile(r"^\s*-\s+\[(?P<mark>[ xX])\]")
 
+PROGRESS_ITEM_RE = re.compile(
+    r"^\s*-\s+\[(?P<mark>[ xX])\]\s+Phase\s+(?P<label>\S+?)\s*[:—–]\s*(?P<title>.+?)\s*$"
+)
+
 IMPLEMENTATION_CHECKLIST_HEADING = "## Implementation Checklist"
+PROGRESS_HEADING = "## Progress"
 
 
 @dataclass
@@ -65,11 +70,46 @@ def _split_checklist(plan_text: str) -> list[str]:
     return lines[start + 1 :]
 
 
+def parse_progress(plan_text: str) -> dict[str, bool]:
+    """Return ``{phase_label: is_done}`` parsed from the ``## Progress`` section.
+
+    The Progress section lives below the review marker — it is the conductor-
+    and user-editable workspace and is excluded from the marker hash. Each
+    entry is a checkbox of the form::
+
+        - [ ] Phase 1: First
+        - [x] Phase 2: Second
+
+    Returns an empty dict when the section is absent (callers fall back to the
+    in-phase checkboxes for old-format plans).
+    """
+    lines = plan_text.splitlines()
+    try:
+        start = next(
+            i
+            for i, line in enumerate(lines)
+            if line.strip() == PROGRESS_HEADING
+        )
+    except StopIteration:
+        return {}
+    progress: dict[str, bool] = {}
+    for line in lines[start + 1 :]:
+        if line.startswith("## "):
+            break
+        match = PROGRESS_ITEM_RE.match(line)
+        if not match:
+            continue
+        progress[match.group("label")] = match.group("mark").lower() == "x"
+    return progress
+
+
 def parse_phases(plan_text: str) -> list[Phase]:
     """Return phases in document order, with per-phase slot values filled in.
 
-    Phases whose task checkboxes are all ticked (`- [x]`) are marked complete.
-    Callers typically filter with ``[p for p in parse_phases(...) if not p.is_complete]``.
+    Completion is sourced from the ``## Progress`` section (preferred, lives
+    below the marker so editing it does not invalidate the review marker). For
+    backward compatibility with plans authored before the workspace split,
+    phases without a Progress entry fall back to in-body checkbox ticks.
     """
     checklist_lines = _split_checklist(plan_text)
     phases: list[Phase] = []
@@ -96,6 +136,7 @@ def parse_phases(plan_text: str) -> list[Phase]:
             continue
         current.body_lines.append(line)
 
+    progress = parse_progress(plan_text)
     for phase in phases:
         phase.impl_files = _parse_file_list(phase.body_lines, IMPL_FILES_RE)
         phase.test_files = _parse_file_list(phase.body_lines, TEST_FILES_RE)
@@ -103,7 +144,10 @@ def parse_phases(plan_text: str) -> list[Phase]:
         phase.validation_command = _parse_backtick_command(
             phase.body_lines, VALIDATION_COMMAND_RE
         )
-        phase.is_complete = _all_checkboxes_ticked(phase.body_lines)
+        if phase.label in progress:
+            phase.is_complete = progress[phase.label]
+        else:
+            phase.is_complete = _all_checkboxes_ticked(phase.body_lines)
 
     return phases
 

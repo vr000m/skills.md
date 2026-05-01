@@ -15,6 +15,7 @@ from conduct.parser import (
     VALIDATION_COMMAND_RE,
     files_overlap,
     parse_phases,
+    parse_progress,
 )
 
 
@@ -225,6 +226,99 @@ def test_parse_phases_h2_still_ends_phase_scope():
     # Only the in-phase checkbox contributes.
     assert sum(1 for line in phases[0].body_lines if "inside phase" in line) == 1
     assert not any("outside phase" in line for line in phases[0].body_lines)
+
+
+def test_parse_progress_reads_below_marker_section():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        ### Phase 2: Second
+
+        **Test command:** `pytest`
+
+        <!-- reviewed: 2026-05-01 @ 0123456789abcdef0123456789abcdef01234567 -->
+
+        ## Progress
+
+        - [x] Phase 1: First
+        - [ ] Phase 2: Second
+
+        ## Findings
+        - Phase 1 ran clean.
+        """
+    )
+    progress = parse_progress(plan)
+    assert progress == {"1": True, "2": False}
+
+
+def test_parse_progress_drives_phase_completion():
+    """Phase completion is sourced from the Progress section, not body checkboxes."""
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        ### Phase 2: Second
+
+        **Test command:** `pytest`
+
+        <!-- reviewed: 2026-05-01 @ 0123456789abcdef0123456789abcdef01234567 -->
+
+        ## Progress
+
+        - [x] Phase 1: First
+        - [ ] Phase 2: Second
+        """
+    )
+    phases = parse_phases(plan)
+    assert phases[0].is_complete is True
+    assert phases[1].is_complete is False
+
+
+def test_parse_progress_em_dash_separator_accepted():
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        ## Progress
+
+        - [x] Phase 1 — First
+        """
+    )
+    progress = parse_progress(plan)
+    assert progress == {"1": True}
+
+
+def test_parse_progress_absent_falls_back_to_body_checkboxes():
+    """Old-format plans (no Progress section) keep the original semantics:
+    completion comes from body checkbox state.
+    """
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        - [x] done one
+        - [x] done two
+        """
+    )
+    phases = parse_phases(plan)
+    assert phases[0].is_complete is True
 
 
 def test_files_overlap_detects_same_path():
