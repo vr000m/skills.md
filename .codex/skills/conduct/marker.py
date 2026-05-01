@@ -33,10 +33,10 @@ MARKER_RE = re.compile(
 )
 MARKER_PLACEHOLDER_RE = re.compile(r"^<!-- reviewed: YYYY-MM-DD @ <hash> -->\s*$")
 
-_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
-def _last_marker_index(
+def last_marker_index(
     lines: list[str], *, include_placeholder: bool = False
 ) -> int | None:
     """Return the index of the last marker line that is **not** inside a fenced
@@ -44,11 +44,14 @@ def _last_marker_index(
 
     ``include_placeholder`` lets `/review-plan` replace the template divider
     without treating it as a valid review marker during preflight.
+
+    Public so ``parser.py`` (and other plan-walking code) can locate the
+    contract/workspace boundary without re-implementing fence tracking.
     """
     in_fence = False
     last = None
     for i, line in enumerate(lines):
-        if _FENCE_RE.match(line):
+        if FENCE_RE.match(line):
             in_fence = not in_fence
             continue
         if in_fence:
@@ -76,7 +79,7 @@ def strip_marker_for_hashing(plan_text: str) -> str:
         return plan_text
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    marker_idx = _last_marker_index(lines, include_placeholder=True)
+    marker_idx = last_marker_index(lines, include_placeholder=True)
     if marker_idx is None:
         return plan_text
     remaining = lines[:marker_idx]
@@ -113,7 +116,7 @@ def read_marker(plan_path: str | Path) -> tuple[str, str] | None:
     etc.) below the marker is ignored.
     """
     lines = Path(plan_path).read_text(encoding="utf-8").splitlines()
-    idx = _last_marker_index(lines)
+    idx = last_marker_index(lines)
     if idx is None:
         return None
     match = MARKER_RE.match(lines[idx])
@@ -167,7 +170,7 @@ def _split_around_marker(plan_text: str) -> tuple[str, str]:
         return plan_text, ""
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    marker_idx = _last_marker_index(lines, include_placeholder=True)
+    marker_idx = last_marker_index(lines, include_placeholder=True)
     if marker_idx is None:
         return plan_text, ""
     above = lines[:marker_idx]
