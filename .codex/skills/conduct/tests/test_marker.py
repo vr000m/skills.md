@@ -74,6 +74,14 @@ def test_strip_removes_marker_and_workspace_below_it():
     assert stripped == body
 
 
+def test_strip_removes_template_placeholder_and_workspace_below_it():
+    body = "# Plan\n\nsome text\n"
+    placeholder = "<!-- reviewed: YYYY-MM-DD @ <hash> -->"
+    workspace = "\n## Progress\n\n- [x] Phase 1: Done\n"
+    stripped = strip_marker_for_hashing(body + placeholder + workspace)
+    assert stripped == body
+
+
 def test_strip_ignores_marker_shaped_text_inside_fence():
     plan = textwrap.dedent(
         f"""\
@@ -117,6 +125,56 @@ def test_write_marker_preserves_workspace_below_existing_marker(tmp_path: Path):
     assert "## Progress\n\n- [x] Phase 1: Done" in text
     assert "## Findings\n\n- Kept." in text
     assert marker_is_stale(plan_path) is False
+
+
+@requires_git
+def test_write_marker_replaces_template_placeholder(tmp_path: Path):
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text(
+        textwrap.dedent(
+            """\
+            # Plan
+
+            body
+
+            <!-- reviewed: YYYY-MM-DD @ <hash> -->
+            <!-- /review-plan writes the marker line above. Everything below is workspace. -->
+
+            ## Progress
+
+            - [ ] Phase 1: First
+            """
+        )
+    )
+
+    assert read_marker(plan_path) is None
+    sha = write_marker(plan_path)
+    text = plan_path.read_text()
+
+    assert "<!-- reviewed: YYYY-MM-DD @ <hash> -->" not in text
+    assert read_marker(plan_path) == (read_marker(plan_path)[0], sha)
+    assert text.index("<!-- reviewed:") < text.index("## Progress")
+    assert marker_is_stale(plan_path) is False
+
+    plan_path.write_text(text.replace("- [ ] Phase 1: First", "- [x] Phase 1: First"))
+    assert marker_is_stale(plan_path) is False
+
+
+@requires_git
+def test_write_marker_idempotent_when_only_blank_lines_below_marker(tmp_path: Path):
+    """A marker followed only by trailing blank lines must not accumulate stray
+    blank workspace on rewrite — the file should round-trip identically.
+    """
+    plan_path = tmp_path / "plan.md"
+    plan_path.write_text("# Plan\n\nbody\n")
+    write_marker(plan_path)
+    plan_path.write_text(plan_path.read_text() + "\n\n\n")
+    sha_first = write_marker(plan_path)
+    text_first = plan_path.read_text()
+    sha_second = write_marker(plan_path)
+    assert sha_second == sha_first
+    assert plan_path.read_text() == text_first
+    assert not plan_path.read_text().endswith("\n\n\n")
 
 
 @requires_git
