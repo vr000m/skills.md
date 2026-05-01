@@ -4,6 +4,7 @@
 
 | Date | Type | Name | Status | Branch | Plan |
 |------|------|------|--------|--------|------|
+| 2026-05-01 | fix | conduct-em-dash-headings | In Progress | feature/conduct-em-dash-headings | N/A (small fix) |
 | 2026-03-17 | feature | deep-review | In Progress | feature/deep-review | `docs/dev_plans/20260317-feature-deep-review.md` |
 
 ## Completed Tasks
