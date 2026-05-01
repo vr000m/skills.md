@@ -17,7 +17,7 @@ Subagent prompt templates live alongside this file:
 Helper modules for preflight and state handling:
 
 - `parser.py` — phase-heading regex, `Test command:` regex, phase-overlap check.
-- `marker.py` — review-marker regex, final-line-only strip, hash compute, staleness check.
+- `marker.py` — review-marker regex, contract/workspace split, hash compute, staleness check.
 - `lock.py` — `fcntl.flock` advisory lock with atomic-`mkdir` fallback and 1-hour stale-break.
 - `schema.py` — last-fenced-block extraction + role-specific report validation (raises `SchemaError`). Stdlib only.
 - `runner.py` — test-command subprocess wrapper with portable wall-clock timeout via `subprocess.run(timeout=...)`. Returns `TestResult(returncode, output, timed_out, duration_seconds)`.
