@@ -42,7 +42,9 @@ Use this template when creating new development plans.
 
 ## Implementation Checklist
 
-Each phase SHOULD include a short contract block directly under the heading. These slots are consumed by `/conduct` to decide how to spawn subagents and run tests. Fill them in **every** phase you expect `/conduct` to execute — a phase with no slots falls through to degraded mode (sequential spawn + test fallback) and forfeits the parallel implementer/test-writer split.
+The Implementation Checklist is part of the **immutable contract** above the review marker. Phase blocks describe what the work is — the contract slots `/conduct` reads to decide how to spawn subagents and run tests. They MUST NOT be edited during a run; per-phase progress and findings live in the workspace section below the marker so editing them does not invalidate the marker.
+
+Each phase SHOULD include a short contract block directly under the heading. Fill the slots in **every** phase you expect `/conduct` to execute — a phase with no slots falls through to degraded mode (sequential spawn + test fallback) and forfeits the parallel implementer/test-writer split.
 
 - `**Impl files:**` — comma-separated paths or globs the implementer will touch (e.g., `src/foo.py, src/bar/*.ts`)
 - `**Test files:**` — comma-separated paths or globs the test-writer will create/modify
@@ -51,7 +53,7 @@ Each phase SHOULD include a short contract block directly under the heading. The
 
 If `Impl files:` and `Test files:` overlap, `/conduct` falls back to sequential spawning for that phase. If any slot is absent, `/conduct` falls back to safe defaults (sequential spawn, resolve test command from repo defaults or `--test-cmd`). If *every* unfinished phase is missing every slot, `/conduct` emits a degraded-mode warning on the first handback.
 
-Each phase MAY include an optional `**Findings:**` subsection for durable notes that should survive after the run: diagnostic query results (with explicit filters stated), decision rationale, and any "checked / accepted behaviour" outcomes. For `/conduct`-driven work, do not rely on subagents to append to the reviewed plan during the run; keep live execution notes in conduct handbacks/state, then copy durable conclusions into `**Findings:**` when you intentionally update the plan.
+Phase task descriptions are plain bullets, not checkboxes — completion lives in the `## Progress` section below the marker, keyed by phase label.
 
 ### Phase 1: [Phase Name]
 
@@ -60,12 +62,9 @@ Each phase MAY include an optional `**Findings:**` subsection for durable notes 
 **Test command:** `npm test -- tests/test_foo.ts`
 **Validation cmd:** `npm run smoke -- --env staging`
 
-- [ ] Task 1
-- [ ] Task 2
-- [ ] Task 3
-
-**Findings:**
-- (implementer appends query results, decision rationale, or accepted-behaviour notes here as work proceeds)
+- Task 1
+- Task 2
+- Task 3
 
 ### Phase 2: [Phase Name]
 
@@ -73,8 +72,8 @@ Each phase MAY include an optional `**Findings:**` subsection for durable notes 
 **Test files:** `...`
 **Test command:** `...`
 
-- [ ] Task 1
-- [ ] Task 2
+- Task 1
+- Task 2
 
 ### Phase 3: [Phase Name] (if needed)
 
@@ -82,8 +81,8 @@ Each phase MAY include an optional `**Findings:**` subsection for durable notes 
 **Test files:** `...`
 **Test command:** `...`
 
-- [ ] Task 1
-- [ ] Task 2
+- Task 1
+- Task 2
 
 ## Technical Specifications
 
@@ -129,26 +128,38 @@ For each seam, consider: who calls it, resource lifecycle (open/close), error pa
 - [ ] Edge case 1
 - [ ] Edge case 2
 
+## Acceptance Criteria
+
+- Criterion 1 - [specific, measurable outcome]
+- Criterion 2 - [specific, measurable outcome]
+- Criterion 3 - [specific, measurable outcome]
+- Code reviewed and approved
+- Tests passing
+- Documentation updated (if applicable)
+
+<!-- reviewed: YYYY-MM-DD @ <hash> -->
+<!-- /review-plan writes the marker line above. Everything below is the workspace: edits here do NOT invalidate the marker. -->
+
+## Progress
+
+Per-phase completion tracked here so ticking a box during a run does not bust the review marker. `/conduct` reads this section to skip already-done phases. Format: `- [ ] Phase <label>: <title>`.
+
+- [ ] Phase 1: [Phase Name]
+- [ ] Phase 2: [Phase Name]
+- [ ] Phase 3: [Phase Name]
+
+## Findings
+
+Durable notes that survive after the run: diagnostic query results (with explicit filters stated), decision rationale, "checked / accepted behaviour" outcomes. Group by phase if useful.
+
+- (append findings here as work proceeds)
+
 ## Issues & Solutions
 
 ### Issue 1: [Brief description]
 - **Problem**: [What went wrong]
 - **Solution**: [How it was resolved]
 - **Files affected**: [List files]
-
-### Issue 2: [Brief description]
-- **Problem**: [What went wrong]
-- **Solution**: [How it was resolved]
-- **Files affected**: [List files]
-
-## Acceptance Criteria
-
-- [ ] Criterion 1 - [specific, measurable outcome]
-- [ ] Criterion 2 - [specific, measurable outcome]
-- [ ] Criterion 3 - [specific, measurable outcome]
-- [ ] Code reviewed and approved
-- [ ] Tests passing
-- [ ] Documentation updated (if applicable)
 
 ## Final Results
 

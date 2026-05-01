@@ -156,24 +156,27 @@ After findings have been presented and discussed, ask the user one question:
 - **`waive`** — user has read the findings and chosen not to act on them. Write the marker anyway.
 - **`no`** — exit without writing. User will re-run `/review-plan` later.
 
-The **review marker** is a single HTML-comment line appended as the final line of the plan file:
+The **review marker** is a single HTML-comment line written into the plan file. It acts as a **divider** between the immutable contract above and the editable workspace below (`## Progress`, `## Findings`, etc.):
 
 ```
 <!-- reviewed: YYYY-MM-DD @ <hash> -->
 ```
 
 - `YYYY-MM-DD` — today's date.
-- `<hash>` — 40-character SHA-1 from `git hash-object <tmpfile>`, where `<tmpfile>` is the plan with its final line removed **only if** that final line already matches the marker regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$`. Otherwise the plan is hashed as-is. This makes re-review idempotent: replacing an existing marker produces the same hash as a plan without one.
+- `<hash>` — 40-character SHA-1 from `git hash-object` of the plan content **above** the marker line. Anything on the marker line or below it is excluded from hashing. This means the user (or `/conduct`) can tick `## Progress` checkboxes or append `## Findings` after review without invalidating the marker.
 
 Procedure:
 
 1. Read the plan file.
-2. If the final non-empty line matches the marker regex, strip it (in memory) to produce `<tmpfile>`; else use the plan as-is.
-3. Compute `git hash-object <tmpfile>`.
-4. Compose the new marker line with today's date and the computed hash.
-5. Write the plan back: original content (with any prior marker line removed) + the new marker as the final line. Ensure a single trailing newline.
+2. Find the last unfenced, column-zero line matching **either** the real-marker regex `^<!-- reviewed: \d{4}-\d{2}-\d{2} @ [0-9a-f]{40} -->\s*$` **or** the template-placeholder regex `^<!-- reviewed: YYYY-MM-DD @ <hash> -->\s*$`. Marker-shaped text inside fenced code blocks or indented prose is ignored. The placeholder is the divider written by `dev-plan/template.md` for new plans — on first review it must be treated as the divider so `## Progress` / `## Findings` end up below the new marker rather than inside the hashed contract.
+3. Split the plan into `(above_marker, below_marker)` at that line. If no marker line of either form is found, treat the whole plan as `above_marker` and `below_marker` as empty.
+4. Compute `git hash-object --stdin` of `above_marker`.
+5. Compose the new marker line with today's date and the computed hash.
+6. Write the plan back: `above_marker` + new marker + a single blank line + `below_marker` (preserved verbatim, so workspace content survives re-review). If `below_marker` was empty, just append the marker as the final line with a trailing newline.
 
-Only the final line is ever treated as a marker. Marker-shaped text inside plan prose or code fences is ignored by both the strip step and the `/conduct` preflight check — this matters when a plan documents the marker format itself.
+`/review-plan` validates by checking that no placeholder string remains anywhere in the file after the write. If one does, the divider was missed and the workspace is now inside the contract — abort and surface the error.
+
+The marker is idempotent: replacing an existing marker on otherwise unchanged content produces the same hash. Workspace content below the marker is never rehashed, so workspace edits during a `/conduct` run do not require re-review.
 
 ## Constraints
 

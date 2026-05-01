@@ -57,11 +57,11 @@ Every plan must include these sections (see template.md for full format):
 1. **Header** - Status, assignee, priority, branch, dates, objective
 2. **Context** - Background, why this work is needed
 3. **Requirements** - Specific requirements and constraints
-4. **Implementation Checklist** - Phased breakdown with checkboxes. Each phase should include a contract block directly under the heading with `**Impl files:**`, `**Test files:**`, `**Test command:**` (in backticks), and optionally `**Validation cmd:**` (in backticks, runs after tests pass or after a no-test phase, failure hands back to user). `/conduct` reads these to decide how to spawn subagents and run tests/validation. Phases may also include a `**Findings:**` subsection for durable notes such as diagnostic query results (with filters explicit), decision rationale, and accepted-behaviour outcomes, but do not rely on `/conduct` subagents to mutate the reviewed plan body during the run. Omit all slots only when the phase is not `/conduct`-driven; if every phase omits them, `/conduct` emits a degraded-mode warning.
+4. **Implementation Checklist** - Phased contract section. Each phase should include a contract block directly under the heading with `**Impl files:**`, `**Test files:**`, `**Test command:**` (in backticks), and optionally `**Validation cmd:**` (in backticks, runs after tests pass or after a no-test phase, failure hands back to user). `/conduct` reads these to decide how to spawn subagents and run tests/validation. Keep phase tasks as plain bullets; per-phase completion and durable findings live below the review marker in `## Progress` and `## Findings`, so runtime edits do not invalidate the marker. Omit all slots only when the phase is not `/conduct`-driven; if every phase omits them, `/conduct` emits a degraded-mode warning.
 5. **Technical Specifications** - Files to modify, interfaces, architecture decisions, integration seams
 6. **Testing Notes** - Test approach and results
 7. **Issues & Solutions** - Problems encountered and how resolved
-8. **Acceptance Criteria** - Definition of done (checkboxes)
+8. **Acceptance Criteria** - Definition of done
 9. **Final Results** - Summary of outcomes when complete
 
 ## Review Focus
@@ -87,7 +87,7 @@ Keep it short, concrete, and specific. If a plan references external standards, 
 6. Address review findings, then proceed to implementation. For a linear multi-phase plan, run `/conduct <plan>` to walk phases with per-phase clean-context subagents (fill the `**Impl files:**`, `**Test files:**`, `**Test command:**`, and optional `**Validation cmd:**` slots so the conductor can decide spawn strategy and run tests/validation). Use `/fan-out` when phases are independent enough to parallelise.
 
 ### During Implementation
-1. Update checkboxes as tasks complete
+1. Update `## Progress` checkboxes as phases complete
 2. Document issues immediately when encountered
 3. Update technical specifications if approach changes
 4. Add testing results as validation is performed
