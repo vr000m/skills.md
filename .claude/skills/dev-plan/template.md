@@ -128,18 +128,6 @@ For each seam, consider: who calls it, resource lifecycle (open/close), error pa
 - [ ] Edge case 1
 - [ ] Edge case 2
 
-## Issues & Solutions
-
-### Issue 1: [Brief description]
-- **Problem**: [What went wrong]
-- **Solution**: [How it was resolved]
-- **Files affected**: [List files]
-
-### Issue 2: [Brief description]
-- **Problem**: [What went wrong]
-- **Solution**: [How it was resolved]
-- **Files affected**: [List files]
-
 ## Acceptance Criteria
 
 - Criterion 1 - [specific, measurable outcome]

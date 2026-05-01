@@ -160,11 +160,7 @@ def _split_around_marker(plan_text: str) -> tuple[str, str]:
         return plan_text, ""
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    marker_idx = None
-    for i in range(len(lines) - 1, -1, -1):
-        if MARKER_RE.match(lines[i]):
-            marker_idx = i
-            break
+    marker_idx = _last_marker_index(lines)
     if marker_idx is None:
         return plan_text, ""
     above = lines[:marker_idx]
