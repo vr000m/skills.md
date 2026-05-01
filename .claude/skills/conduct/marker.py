@@ -31,14 +31,19 @@ from pathlib import Path
 MARKER_RE = re.compile(
     r"^<!-- reviewed: (\d{4}-\d{2}-\d{2}) @ ([0-9a-f]{40}) -->\s*$"
 )
+MARKER_PLACEHOLDER_RE = re.compile(r"^<!-- reviewed: YYYY-MM-DD @ <hash> -->\s*$")
 
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
-def _last_marker_index(lines: list[str]) -> int | None:
+def _last_marker_index(
+    lines: list[str], *, include_placeholder: bool = False
+) -> int | None:
     """Return the index of the last marker line that is **not** inside a fenced
-    code block, or ``None`` if no such line exists. Indented marker-shaped
-    lines fail ``MARKER_RE`` (which anchors at column 0) and are also ignored.
+    code block, or ``None`` if no such line exists.
+
+    ``include_placeholder`` lets `/review-plan` replace the template divider
+    without treating it as a valid review marker during preflight.
     """
     in_fence = False
     last = None
@@ -48,7 +53,9 @@ def _last_marker_index(lines: list[str]) -> int | None:
             continue
         if in_fence:
             continue
-        if MARKER_RE.match(line):
+        if MARKER_RE.match(line) or (
+            include_placeholder and MARKER_PLACEHOLDER_RE.match(line)
+        ):
             last = i
     return last
 
@@ -69,7 +76,7 @@ def strip_marker_for_hashing(plan_text: str) -> str:
         return plan_text
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    marker_idx = _last_marker_index(lines)
+    marker_idx = _last_marker_index(lines, include_placeholder=True)
     if marker_idx is None:
         return plan_text
     remaining = lines[:marker_idx]
@@ -160,7 +167,7 @@ def _split_around_marker(plan_text: str) -> tuple[str, str]:
         return plan_text, ""
     has_trailing_newline = plan_text.endswith("\n")
     lines = plan_text.splitlines()
-    marker_idx = _last_marker_index(lines)
+    marker_idx = _last_marker_index(lines, include_placeholder=True)
     if marker_idx is None:
         return plan_text, ""
     above = lines[:marker_idx]
@@ -170,8 +177,16 @@ def _split_around_marker(plan_text: str) -> tuple[str, str]:
     if above and has_trailing_newline:
         above_text += "\n"
     below_lines = lines[marker_idx + 1 :]
+    # Drop leading and trailing blank lines so a marker followed only by
+    # whitespace produces an empty workspace (avoids stray blank rewrites).
+    while below_lines and not below_lines[0].strip():
+        below_lines.pop(0)
+    while below_lines and not below_lines[-1].strip():
+        below_lines.pop()
+    if not below_lines:
+        return above_text, ""
     below_text = "\n".join(below_lines)
-    if below_lines and has_trailing_newline:
+    if has_trailing_newline:
         below_text += "\n"
     return above_text, below_text
 

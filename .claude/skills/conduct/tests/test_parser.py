@@ -273,6 +273,67 @@ def test_parse_progress_em_dash_separator_accepted():
     assert progress == {"1": True}
 
 
+def test_parse_progress_above_marker_is_ignored():
+    """A ``## Progress`` heading placed in the contract section (above the
+    review marker) must NOT bind. Otherwise a stray heading there would silently
+    take precedence while edits to it would also bust the marker hash. Treat it
+    as no-Progress-section so callers fall back to body checkboxes.
+    """
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        ## Progress
+
+        - [x] Phase 1: First (this is in the contract — must be ignored)
+
+        <!-- reviewed: 2026-05-01 @ 0123456789abcdef0123456789abcdef01234567 -->
+        """
+    )
+    assert parse_progress(plan) is None
+
+
+def test_parse_progress_present_but_label_missing_means_not_done():
+    """When ``## Progress`` exists but a phase label isn't listed, the phase is
+    not done. Do not silently fall back to body checkboxes (which the new
+    template renders as plain bullets, never ticked).
+    """
+    plan = textwrap.dedent(
+        """\
+        ## Implementation Checklist
+
+        ### Phase 1: First
+
+        **Test command:** `pytest`
+
+        - [x] task one
+        - [x] task two
+
+        ### Phase 2: Second
+
+        **Test command:** `pytest`
+
+        - [x] task
+
+        <!-- reviewed: 2026-05-01 @ 0123456789abcdef0123456789abcdef01234567 -->
+
+        ## Progress
+
+        - [x] Phase 1: First
+        """
+    )
+    phases = parse_phases(plan)
+    assert phases[0].is_complete is True
+    # Phase 2 has every body checkbox ticked but is not in Progress → still
+    # not done. The fallback to body checkboxes only applies when there is no
+    # Progress section at all.
+    assert phases[1].is_complete is False
+
+
 def test_parse_progress_absent_falls_back_to_body_checkboxes():
     """Old-format plans (no Progress section) keep the original semantics:
     completion comes from body checkbox state.

@@ -10,6 +10,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from marker import _last_marker_index
+
 PHASE_HEADING_RE = re.compile(
     r"^###\s+Phase\s+(\S+?)\s*[:—–]\s*(.+?)\s*(\([^)]*\))?\s*$"
 )
@@ -70,8 +72,9 @@ def _split_checklist(plan_text: str) -> list[str]:
     return lines[start + 1 :]
 
 
-def parse_progress(plan_text: str) -> dict[str, bool]:
-    """Return ``{phase_label: is_done}`` parsed from the ``## Progress`` section.
+def parse_progress(plan_text: str) -> dict[str, bool] | None:
+    """Return ``{phase_label: is_done}`` parsed from the ``## Progress`` section,
+    or ``None`` if the section is absent.
 
     The Progress section lives below the review marker — it is the conductor-
     and user-editable workspace and is excluded from the marker hash. Each
@@ -80,18 +83,28 @@ def parse_progress(plan_text: str) -> dict[str, bool]:
         - [ ] Phase 1: First
         - [x] Phase 2: Second
 
-    Returns an empty dict when the section is absent (callers fall back to the
-    in-phase checkboxes for old-format plans).
+    Only ``## Progress`` headings *below* a real review marker are honoured. A
+    ``## Progress`` heading placed in the contract (above the marker) is
+    ignored, since edits to it would invalidate the marker — the safer behaviour
+    is to treat it as not-a-workspace and fall back to body checkboxes.
+
+    Returns ``None`` when the section is absent so callers can distinguish
+    "no Progress section, fall back to body checkboxes" from "Progress section
+    present but this label isn't listed → phase not done".
     """
     lines = plan_text.splitlines()
+    # Scan only below the (real) marker line so a stray ``## Progress`` placed
+    # above the marker — where edits would bust the hash — does not bind.
+    marker_idx = _last_marker_index(lines)
+    scan_start = marker_idx + 1 if marker_idx is not None else 0
     try:
         start = next(
             i
-            for i, line in enumerate(lines)
+            for i, line in enumerate(lines[scan_start:], start=scan_start)
             if line.strip() == PROGRESS_HEADING
         )
     except StopIteration:
-        return {}
+        return None
     progress: dict[str, bool] = {}
     for line in lines[start + 1 :]:
         if line.startswith("## "):
@@ -144,10 +157,15 @@ def parse_phases(plan_text: str) -> list[Phase]:
         phase.validation_command = _parse_backtick_command(
             phase.body_lines, VALIDATION_COMMAND_RE
         )
-        if phase.label in progress:
-            phase.is_complete = progress[phase.label]
-        else:
+        if progress is None:
+            # Old-format plan with no Progress section: source completion from
+            # in-body checkboxes (legacy fallback).
             phase.is_complete = _all_checkboxes_ticked(phase.body_lines)
+        else:
+            # Progress section is authoritative. A label missing from it means
+            # not-done — do not silently fall back to body checkboxes (which on
+            # the new template are plain bullets and never tick).
+            phase.is_complete = progress.get(phase.label, False)
 
     return phases
 
