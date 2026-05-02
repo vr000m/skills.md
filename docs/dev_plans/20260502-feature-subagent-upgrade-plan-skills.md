@@ -15,7 +15,7 @@ Add subagent-driven exploration to `dev-plan create` and parallel multi-lens rev
 
 `dev-plan` currently relies on whatever the main agent already knows about the repo when drafting "Files to Modify" and "Technical Specifications". This produces plans that reference paths or APIs the main agent never verified — a failure mode `review-plan` catches *after* the fact.
 
-`review-plan` already spawns one isolated-context subagent. It works, but it conflates several review lenses (architecture, sequencing, spec, codebase claims) into a single prompt. The deep-review skill demonstrates that splitting lenses across parallel subagents produces deeper, more specific findings without bloating any one context.
+`review-plan` currently differs by harness: Claude already spawns one isolated-context subagent, while Codex runs the audit in the main session because delegation is optional there. Both shapes work, but they conflate several review lenses (architecture, sequencing, spec, codebase claims) into a single prompt. The Codex `deep-review` skill demonstrates the Codex-side target pattern: split lenses across clean-context `spawn_agent` workers when available, and fall back to sequential in-session lenses when `spawn_agent` is unavailable.
 
 Both skills are mirrored to `.codex/skills/` and promoted to `~/.claude/` and `~/.codex/` via `just promote-skills`. Any change has to land in both mirrors with parity.
 
@@ -44,36 +44,38 @@ The split exists because the two harnesses have different delegation primitives:
 - **[GENERIC]** Each lens returns structured findings: `{category, severity, finding, evidence, suggestion}` where `category ∈ {Assumption, Constraint, Ambiguity, Risk, Sequencing, Missing Task, Testing Gap}` and `severity ∈ {Critical, Important, Minor}`.
 - **[GENERIC]** Orchestrator merges lens outputs by severity (Critical → Important → Minor) and presents a single combined report. Empty lenses are dropped silently; all-empty produces a clean review.
 - **[GENERIC]** Both skills get a `rubric.md` mirroring the deep-review pattern: gradeable criteria the orchestrator self-checks before presenting findings (no manufactured findings, evidence is concrete, severity discipline). One rubric per skill (review-plan and dev-plan), mirrored in `.claude/` and `.codex/`.
-- **[GENERIC]** Model assignment per role (cost-aware, not all opus):
-  - `architecture`, `sequencing`, `spec-and-testing` lenses → `opus` (judgment-heavy)
-  - `codebase-claims` lens → `haiku` (factual lookup, no extended reasoning required)
-  - `dev-plan` Explore subagent → `sonnet` (light pattern reasoning over fact-gathering)
+- **[GENERIC]** Model assignment per role is cost-aware by capability tier, not by a single cross-harness model slug:
+  - `architecture`, `sequencing`, `spec-and-testing` lenses → high-reasoning reviewer tier (judgment-heavy)
+  - `codebase-claims` lens → low-cost factual reviewer tier (factual lookup, no extended reasoning required)
+  - `dev-plan` Explore subagent → balanced/low-cost planner tier (light pattern reasoning over fact-gathering)
 - **[GENERIC]** `dev-plan create` runs one Explore step that gathers codebase facts (which referenced paths exist, prevailing patterns in target areas, dependency versions from `package.json` / `pyproject.toml` / `Cargo.toml`) and feeds them into the Technical Specifications / Files-to-Modify sections **above the review marker**, at create time only. `dev-plan update` and `dev-plan complete` do not re-explore.
 - **[GENERIC]** Explore returns structured facts only: verified paths, observed patterns, dependency versions. It does not draft plan prose; the main agent owns the plan body.
 - **[GENERIC]** Review marker logic (hash-above-marker, idempotent rewrite, placeholder validation) is unchanged.
-- **[GENERIC]** Mirror parity gate: `just check-sync` passes after both sides have updated. Lens names, prompt bodies, finding schema, and rubric content are byte-identical between `.claude/` and `.codex/`. Only the dispatch section diverges.
+- **[GENERIC]** Mirror parity gate: `just check-sync` passes after both sides have updated, and the shared generic blocks are compared directly across `.claude/` and `.codex/`. Lens names, prompt bodies, finding schema, and rubric content are byte-identical between `.claude/` and `.codex/`. Only the dispatch section diverges. `just check-sync` verifies repo-vs-global authorities; it does not by itself prove cross-harness prompt-block identity inside otherwise different `SKILL.md` files.
 - **[GENERIC]** Backward compatibility: `/review-plan [path]` invocation is unchanged at the user-visible level. Plan-file format unchanged.
 
 ### Claude-specific
 
-- **[CLAUDE]** review-plan dispatches the four lenses as parallel `Agent` calls with isolated context (no parent conversation history). Each call sets `model` per the table above.
+- **[CLAUDE]** review-plan dispatches the four lenses as parallel `Agent` calls with isolated context (no parent conversation history). Each call sets `model` per the Claude model mapping below.
 - **[CLAUDE]** dev-plan Explore is a single `Agent` call with isolated context, model `sonnet`.
+- **[CLAUDE]** Model slugs: `architecture`, `sequencing`, `spec-and-testing` use `opus`; `codebase-claims` uses `haiku`; `dev-plan` Explore uses `sonnet`.
 
 ### Codex-specific
 
-- **[CODEX]** review-plan dispatches the four lenses via `spawn_agent` when available, otherwise falls back to running them sequentially in-session — same pattern as `.codex/skills/deep-review/SKILL.md`. The fallback uses identical lens prompts and finding schema; only the spawn mechanism changes.
-- **[CODEX]** dev-plan Explore follows the same convention: `spawn_agent` if available, otherwise inline fact-gathering with the same prompt and structured output contract.
+- **[CODEX]** review-plan dispatches the four lenses via parallel `spawn_agent` calls when available, otherwise falls back to running them sequentially in-session — same pattern as `.codex/skills/deep-review/SKILL.md`. The fallback uses identical lens prompts and finding schema; only the spawn mechanism changes. Because the fallback is not a clean-context worker, the skill must label it as best-effort context isolation in the run summary.
+- **[CODEX]** review-plan uses Codex-native model identifiers: `architecture`, `sequencing`, and `spec-and-testing` use `gpt-5.4`; `codebase-claims` uses `gpt-5.4-mini`. If a requested override is unavailable, use the closest supported Codex model in the same reasoning/cost tier, matching `.codex/skills/deep-review/SKILL.md`.
+- **[CODEX]** dev-plan Explore follows the same convention: `spawn_agent` if available, otherwise inline fact-gathering with the same prompt and structured output contract. Use `gpt-5.4-mini` by default for Explore; if unavailable, use the closest supported Codex model in the same balanced/low-cost tier.
 
 ## Review Focus
 
-- **[GENERIC] Mirror parity** — lens names, prompt bodies, finding schema, and `rubric.md` content are byte-identical across `.claude/` and `.codex/`. Only the dispatch section legitimately differs. `just check-sync` is the gate.
+- **[GENERIC] Mirror parity** — lens names, prompt bodies, finding schema, and `rubric.md` content are byte-identical across `.claude/` and `.codex/`. Only the dispatch section legitimately differs. Use direct cross-harness comparison for shared prompt/rubric blocks, then `just check-sync` after promotion/sync to verify repo-vs-global authority state.
 - **[GENERIC] Single-level delegation** — each lens is a leaf agent. No nested fan-out. The orchestrator is the skill itself.
-- **[GENERIC] Context isolation** — every lens prompt opens with the explicit "You have NOT been part of the conversation" clause. The dispatch must not leak parent transcript content.
-- **[GENERIC] Cost discipline** — model assignments mix `opus` / `sonnet` / `haiku` per the table above. Surface the cost expectation in the skill description (auto-trigger metadata), not just the body. Optionally support a `--fast` arg that runs a single combined lens for users who explicitly opt out.
+- **[GENERIC] Context isolation** — every lens prompt opens with the explicit "You have NOT been part of the conversation" clause. Delegated dispatch must not leak parent transcript content. Codex's documented in-session fallback cannot provide true clean-context isolation, so it must be described as a best-effort fallback that reuses the same prompt contract without claiming full isolation.
+- **[GENERIC] Cost discipline** — model assignments use the high-reasoning / low-cost factual / balanced planner tiers above, with harness-specific slugs documented in the relevant dispatch sections. Surface the cost expectation in both places: a concise note in the skill description string (auto-trigger metadata) and a longer "Cost" section in the body. Optionally support a `--fast` arg that runs a single combined lens for users who explicitly opt out.
 - **[GENERIC] Explore scope** — produces structured facts only; main agent owns plan prose. Facts land above the review marker at `create` time only.
 - **[GENERIC] Rubric** — review-plan and dev-plan each ship a `rubric.md` mirroring deep-review's gradeable-criteria pattern. The orchestrator self-checks output against the rubric before presenting findings.
 - **[CLAUDE] Dispatch idiom** — parallel `Agent` calls with `model` set per role.
-- **[CODEX] Dispatch idiom** — `spawn_agent` with in-session sequential fallback when unavailable, mirroring the deep-review pattern.
+- **[CODEX] Dispatch idiom** — parallel `spawn_agent` calls with in-session sequential fallback when unavailable, mirroring the deep-review pattern.
 
 ## Implementation Checklist
 
@@ -87,6 +89,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 - Author the four lens prompt bodies (architecture, sequencing, spec-and-testing, codebase-claims) — these are the byte-identical generic bodies shared across harnesses.
 - Author the finding-schema spec and merge-by-severity logic in prose.
+- Put shared lens prompt bodies and finding schema under stable headings or markers in each `SKILL.md` so reviewers can compare those generic blocks directly even though the dispatch sections differ.
 - Create `rubric.md` for review-plan (lens-output gradeable criteria) and `rubric.md` for dev-plan (Explore-output gradeable criteria), mirroring the deep-review rubric pattern.
 - Drop these rubrics into both `.claude/skills/<skill>/rubric.md` and `.codex/skills/<skill>/rubric.md` simultaneously so `check-sync` sees parity.
 
@@ -113,11 +116,13 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 > Codex maintainer reviews this phase independently. The lens prompts, finding schema, and rubric reference are generic (shipped in Phase 1) and must not diverge.
 
-- Replace single-subagent dispatch with `spawn_agent` invocation per lens (model per role) and an in-session sequential fallback when `spawn_agent` is unavailable, mirroring `.codex/skills/deep-review/SKILL.md`.
+- Replace single-pass in-session audit with parallel `spawn_agent` invocation per lens when available (`gpt-5.4` for architecture/sequencing/spec-and-testing, `gpt-5.4-mini` for codebase-claims) and an in-session sequential fallback when `spawn_agent` is unavailable, mirroring `.codex/skills/deep-review/SKILL.md`.
+- Do not fork parent conversation context into spawned lenses; pass only the plan content, extracted Review Focus, repo-root checklist material, and the lens prompt. Close spawned lens agents after their final reports are captured.
+- In the fallback run summary, explicitly state that sequential in-session review is best-effort context isolation because no clean worker context is available.
 - Embed the same generic lens prompt bodies and finding schema as Phase 2.
 - Reference `rubric.md` for the orchestrator self-check.
 - Preserve review-marker logic verbatim.
-- Add cost note in description and body.
+- Add a concise cost note in the YAML `description` string and a longer "Cost" section in the body.
 
 ### Phase 4: [CLAUDE] dev-plan Explore subagent
 
@@ -138,7 +143,8 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 > Codex maintainer reviews this phase independently.
 
-- Add the same Explore step using `spawn_agent` if available, otherwise inline fact-gathering with the same prompt + structured-fact contract.
+- Add the same Explore step using `spawn_agent` with `gpt-5.4-mini` if available, otherwise inline fact-gathering with the same prompt + structured-fact contract.
+- Do not fork parent conversation context into the spawned Explore worker; pass only the user request, discovered repo basics, and the Explore prompt. If using inline fallback, label the facts as gathered in-session rather than isolated.
 - Same scope rules: above the marker, create-only.
 
 ### Phase 6: [GENERIC] Docs, promotion, manual verification
@@ -152,6 +158,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - Run `/update-docs` to catch stale references.
 - **Manual verification (deterministic):** create a throwaway plan referencing 3 fictitious paths; verify codebase-claims lens flags exactly those at Critical severity. Delete the throwaway plan after.
 - **Manual verification (dogfooding):** run `/review-plan` against this very plan once Phase 2 has landed; run `/dev-plan create feature dummy-test` once Phase 4 has landed.
+- **Manual verification (cross-harness parity):** directly compare the shared prompt-body/finding-schema blocks and `rubric.md` files across `.claude/` and `.codex/`; `just check-sync` alone is not sufficient for this byte-identity assertion because it checks each repo mirror against its global authority.
 - Final `just check-sync` to confirm mirror parity.
 
 ## Technical Specifications
@@ -168,12 +175,14 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - **[GENERIC]** `.claude/skills/dev-plan/rubric.md` and `.codex/skills/dev-plan/rubric.md` — byte-identical
 
 ### Architecture Decisions
-- **[GENERIC] Four lenses** — matches deep-review's cardinality; each lens has a distinct scope. `codebase-claims` is the cheap factual lens; the other three are judgment-heavy.
+- **[GENERIC] Four lenses** — follows deep-review's multi-lens shape, but with review-plan-specific lens names and count; each lens has a distinct scope. `codebase-claims` is the cheap factual lens; the other three are judgment-heavy.
 - **[GENERIC] Lens bodies inline in SKILL.md, criteria in rubric.md** — same shape as deep-review.
 - **[GENERIC] dev-plan stays single-subagent** — fact-gathering, not adversarial review.
-- **[GENERIC] Mixed model assignment** — `opus` for the three judgment lenses, `haiku` for codebase-claims (factual lookup), `sonnet` for the dev-plan Explore subagent. Cost ≈ 3× opus + 1× haiku for review-plan, 1× sonnet for dev-plan create.
+- **[GENERIC] Mixed model assignment** — three judgment-heavy review-plan lenses use the harness high-reasoning tier, `codebase-claims` uses the cheaper factual tier, and dev-plan Explore uses the balanced/low-cost planner tier. Cost expectation is roughly three high-reasoning reviews plus one cheap factual review for `/review-plan`, and one balanced/low-cost Explore pass for `/dev-plan create`.
 - **[CLAUDE] Dispatch:** parallel `Agent` tool calls with `model` set per role.
-- **[CODEX] Dispatch:** `spawn_agent` per lens with in-session sequential fallback (mirrors `.codex/skills/deep-review/SKILL.md`).
+- **[CLAUDE] Model mapping:** `opus` / `opus` / `opus` / `haiku` for review-plan lenses; `sonnet` for dev-plan Explore.
+- **[CODEX] Dispatch:** parallel `spawn_agent` per lens with in-session sequential fallback (mirrors `.codex/skills/deep-review/SKILL.md`).
+- **[CODEX] Model mapping:** `gpt-5.4` / `gpt-5.4` / `gpt-5.4` / `gpt-5.4-mini` for review-plan lenses; `gpt-5.4-mini` for dev-plan Explore. If a model override is unavailable, use the closest supported Codex model in the same reasoning/cost tier.
 
 ### Dependencies
 - None new.
@@ -187,7 +196,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 | Rubric reference | [GENERIC] | rubric.md | orchestrator self-check | Self-check before findings are presented; identical criteria across mirrors |
 | Mirror parity | [GENERIC] | .claude edits | .codex edits | Lens bodies, finding schema, rubric content byte-identical; only the dispatch section diverges |
 | Claude dispatch | [CLAUDE] | review-plan / dev-plan SKILL.md | Agent tool | Parallel calls with isolated context, `model` set per role |
-| Codex dispatch | [CODEX] | review-plan / dev-plan SKILL.md | spawn_agent or in-session | Same prompts and schema regardless of path; fallback path documented inline |
+| Codex dispatch | [CODEX] | review-plan / dev-plan SKILL.md | spawn_agent or in-session | Same prompts and schema regardless of path; spawned workers use clean context; fallback path is best-effort and documented inline |
 
 ## Testing Notes
 
@@ -211,16 +220,16 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 - **[GENERIC]** Four lens prompts, finding schema, and `rubric.md` files are byte-identical between `.claude/` and `.codex/`. `just check-sync` is clean.
 - **[GENERIC]** Each lens prompt opens with the explicit "You have NOT been part of the conversation" clause.
-- **[GENERIC]** Model assignment matches the table: opus / opus / opus / haiku for review-plan lenses, sonnet for dev-plan Explore.
+- **[GENERIC]** Model assignment matches the capability tiers and the harness-specific model mapping sections.
 - **[GENERIC]** review-plan and dev-plan each ship a `rubric.md` referenced from SKILL.md.
-- **[GENERIC]** Cost expectation surfaced in the skill description string, not just the body.
+- **[GENERIC]** Cost expectation surfaced in both the skill description string and the body.
 - **[GENERIC]** Review marker write/validate logic unchanged and idempotent.
 - **[GENERIC]** dev-plan Explore facts land above the marker on `create` only; `update` / `complete` do not re-explore.
 - **[GENERIC]** Manual codebase-claims test against a throwaway plan with 3 fictitious paths flags exactly those at Critical.
 - **[CLAUDE]** review-plan dispatches four parallel `Agent` calls with isolated context.
 - **[CLAUDE]** dev-plan Explore is one `Agent` call with isolated context, model `sonnet`.
-- **[CODEX]** review-plan dispatches via `spawn_agent` when available, with in-session sequential fallback that uses identical prompts and schema.
-- **[CODEX]** dev-plan Explore uses `spawn_agent` when available, otherwise inline fact-gathering with the same prompt/schema.
+- **[CODEX]** review-plan dispatches via parallel `spawn_agent` calls when available, with in-session sequential fallback that uses identical prompts and schema and labels isolation as best-effort.
+- **[CODEX]** dev-plan Explore uses `spawn_agent` with `gpt-5.4-mini` when available, otherwise inline fact-gathering with the same prompt/schema.
 - Code reviewed (`/review`, `/security-review`, `/deep-review`) and approved before merge.
 
 <!-- reviewed: YYYY-MM-DD @ <hash> -->
