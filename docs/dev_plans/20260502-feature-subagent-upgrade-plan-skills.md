@@ -247,7 +247,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - **[CODEX]** dev-plan Explore uses `spawn_agent` with `gpt-5.4-mini` when available, otherwise inline fact-gathering with the same prompt/schema.
 - Code reviewed (`/review`, `/security-review`, `/deep-review`) and approved before merge.
 
-<!-- reviewed: YYYY-MM-DD @ <hash> -->
+<!-- reviewed: 2026-05-02 @ e0a6cccb89d567a79e95f7b12bbe332d83da15d3 -->
 <!-- /review-plan writes the marker line above. Everything below is the workspace: edits here do NOT invalidate the marker. -->
 
 ## Progress
