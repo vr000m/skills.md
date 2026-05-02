@@ -252,7 +252,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 ## Progress
 
-- [ ] Phase 1: [GENERIC] Lens contract + rubrics
+- [x] Phase 1: [GENERIC] Lens contract + rubrics
 - [ ] Phase 2: [CLAUDE] review-plan parallel-Agent dispatch
 - [ ] Phase 3: [CODEX] review-plan spawn_agent dispatch with in-session fallback
 - [ ] Phase 4: [CLAUDE] dev-plan Explore subagent
@@ -261,7 +261,11 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 ## Findings
 
-- (append findings here as work proceeds)
+- **Phase 1 scope deviation (2026-05-02)**: Implementer touched three files outside the declared Impl list — `.claude/skills/deep-review/rubric.md`, `.codex/skills/deep-review/rubric.md`, `.codex/skills/spec-compliance/rubric.md` — to reconcile pre-existing cross-harness drift surfaced by the new `check-prompt-parity` script. Without these reconciliations the Phase 1 test command would have failed on drift Phase 1 did not introduce. Deep-review edits are cosmetic (em-dash normalisation, line-wrap removal, `latest-claude.json`/`latest-codex.json` → `latest-*.json` for harness-neutral parity). The spec-compliance edit initially collapsed `(✅ Met, ❌ Missing, ⚠️ Partial, ➖ N/A)` to bare emojis to match `.claude`; the deep-review fix-up restored full label text on both sides since the labelled criterion is more gradeable.
+- **Phase 1 deep-review fix-ups (2026-05-02)**: After deep-review surfaced two Important architectural concerns:
+  - Added `Nonexistent Reference` to the `category` enum in both `review-plan/rubric.md` files — the original enum had no value mapping cleanly to `codebase-claims` lens output (missing paths/APIs).
+  - Documented `check-prompt-parity.sh` scope (rubric.md only, not lens prompt blocks) in a new script header rather than renaming the script. Renaming would have invalidated the review marker; the header makes the limitation explicit and points readers to Phase 6 for manual eyeballing of lens-prompt blocks.
+- **Phase 1 deep-review minor fix-ups (2026-05-02)**: justfile comment on `check-prompt-parity` recipe; collapsed the script's double `diff -u` invocation to a single capture-and-print pattern.
 
 ## Issues & Solutions
 

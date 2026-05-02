@@ -15,6 +15,7 @@ bootstrap-skills-force:
 check-sync:
     ./scripts/check-sync.sh
 
+# Verify rubric.md parity between .claude and .codex mirrors
 check-prompt-parity:
     ./scripts/check-prompt-parity.sh
 

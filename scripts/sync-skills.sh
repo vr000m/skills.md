@@ -88,10 +88,10 @@ for skill in "${managed_skills[@]}"; do
 done
 
 claude_only_skills=()
-if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+if [[ -n "${CLAUDE_ONLY_SKILLS// /}" ]]; then
 	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 fi
-if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+if [[ -n "${CLAUDE_ONLY_SKILLS// /}" ]]; then
 	for skill in "${claude_only_skills[@]}"; do
 		if [[ ! -d "$GLOBAL_CLAUDE_SKILLS_DIR/$skill" ]]; then
 			echo "skip: $skill not found in global claude dir (run promote-skills or bootstrap-skills to seed it)"

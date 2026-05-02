@@ -22,7 +22,7 @@ fi
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 claude_only_skills=()
-if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+if [[ -n "${CLAUDE_ONLY_SKILLS// /}" ]]; then
 	read -r -a claude_only_skills <<<"$CLAUDE_ONLY_SKILLS"
 fi
 
@@ -43,7 +43,7 @@ for skill in "${managed_skills[@]}"; do
 	rsync -a --delete "$ROOT_DIR/.claude/skills/$skill/" "$GLOBAL_CLAUDE_SKILLS_DIR/$skill/"
 done
 
-if [[ -n "${CLAUDE_ONLY_SKILLS// }" ]]; then
+if [[ -n "${CLAUDE_ONLY_SKILLS// /}" ]]; then
 	for skill in "${claude_only_skills[@]}"; do
 		src="$ROOT_DIR/.claude/skills/$skill"
 		if [[ ! -d "$src" ]]; then

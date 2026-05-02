@@ -1,4 +1,26 @@
 #!/usr/bin/env bash
+# check-prompt-parity.sh
+#
+# Verify that prompt-contract artefacts (currently `rubric.md`) are
+# byte-identical between `.claude/skills/<skill>/` and
+# `.codex/skills/<skill>/` for every entry in MANAGED_SKILLS.
+#
+# Scope: rubric.md only. Lens prompt bodies and finding schema embedded
+# inside SKILL.md are not script-checkable and require manual review per
+# the dev plan's Phase 6 verification step.
+#
+# Inputs:
+#   MANAGED_SKILLS  whitespace-separated list of skill names. Sourced
+#                   from .env if present; falls back to the hardcoded
+#                   default below. Comma-separated values are NOT split.
+#
+# Per-skill behaviour:
+#   - neither side has rubric.md   skip (skill ships no rubric)
+#   - exactly one side has it      fail (drift)
+#   - both sides have it           diff; fail on mismatch
+#
+# Exit codes: 0 clean, 1 drift detected.
+
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,9 +56,9 @@ for skill in "${managed_skills[@]}"; do
 		continue
 	fi
 
-	if ! diff -u "$claude_rubric" "$codex_rubric" >/dev/null; then
+	if ! diff_output=$(diff -u "$claude_rubric" "$codex_rubric"); then
 		echo "drift: $skill rubric.md differs between .claude and .codex"
-		diff -u "$claude_rubric" "$codex_rubric" || true
+		echo "$diff_output"
 		PARITY_DIFF=1
 	fi
 done

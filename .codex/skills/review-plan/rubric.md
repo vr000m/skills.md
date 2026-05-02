@@ -20,7 +20,7 @@ Gradeable criteria for evaluating a completed `/review-plan` run. The orchestrat
 ## Finding Quality
 
 - Each finding has all five fields: `category`, `severity`, `finding`, `evidence`, `suggestion`
-- `category ∈ {Assumption, Constraint, Ambiguity, Risk, Sequencing, Missing Task, Testing Gap}` — no other values
+- `category ∈ {Assumption, Constraint, Ambiguity, Risk, Sequencing, Missing Task, Testing Gap, Nonexistent Reference}` — no other values; `Nonexistent Reference` is reserved for `codebase-claims` findings about paths/APIs/dependencies that do not exist or have moved
 - `severity ∈ {Critical, Important, Minor}` — no other values
 - `evidence` cites a concrete plan line, file path, API symbol, or spec section — not a paraphrase
 - `suggestion` is a specific, actionable change — not "consider improving X"
