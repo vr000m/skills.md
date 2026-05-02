@@ -208,8 +208,10 @@ If the documentation is up to date, say so concisely.
 
 ## Persisted Run State
 
-Store the last run in `.deep-review/latest.json` so `--continue` can either resume an incomplete
-run or review only commits added since the last completed review.
+Store the last run in `.deep-review/latest-codex.json` so `--continue` can either resume an
+incomplete run or review only commits added since the last completed review. Each runtime owns its
+own state file (Claude uses `.deep-review/latest-claude.json`) so concurrent or interleaved runs
+don't clobber each other's resume target. The `.deep-review/` directory is gitignored as a whole.
 
 Suggested schema:
 ```json

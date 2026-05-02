@@ -49,4 +49,4 @@ before presenting findings to the user.
   "Prior findings ... - verify these are addressed"
 - If stored `head_commit` is not an ancestor of `HEAD`, or `review_focus_hash` changed, the run fell
   back to `--full` with a warning
-- Stored state in `.deep-review/latest.json` matches the schema version
+- Stored state in `.deep-review/latest-codex.json` matches the schema version
