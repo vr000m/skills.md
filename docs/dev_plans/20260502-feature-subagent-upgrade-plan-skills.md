@@ -99,7 +99,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - Put shared lens prompt bodies and finding schema under stable headings or markers in each `SKILL.md` so reviewers can compare those generic blocks directly even though the dispatch sections differ.
 - Create `rubric.md` for review-plan (lens-output gradeable criteria) and `rubric.md` for dev-plan (Explore-output gradeable criteria), mirroring the deep-review rubric pattern.
 - Drop these rubrics into both `.claude/skills/<skill>/rubric.md` and `.codex/skills/<skill>/rubric.md` simultaneously so `check-sync` sees parity.
-- Add `scripts/check-prompt-parity.sh` that diffs `.claude/skills/<skill>/rubric.md` against `.codex/skills/<skill>/rubric.md` for each managed skill (read `MANAGED_SKILLS` from `.env` the same way `promote-skills.sh` does); fail with non-zero exit when any rubric pair diverges. Add a `check-prompt-parity` recipe to `justfile`.
+- Add `scripts/check-prompt-parity.sh` that reads `MANAGED_SKILLS` from `.env` the same way `promote-skills.sh` does, then checks rubric parity only where rubrics exist: skip a managed skill when neither `.claude/skills/<skill>/rubric.md` nor `.codex/skills/<skill>/rubric.md` exists, fail when exactly one side exists, and diff the files when both exist. Add a `check-prompt-parity` recipe to `justfile`.
 
 ### Phase 2: [CLAUDE] review-plan parallel-Agent dispatch
 
@@ -167,7 +167,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - Run `/update-docs` to catch stale references.
 - **Manual verification (deterministic):** create a throwaway plan in `/tmp/` (not `docs/dev_plans/`) referencing 3 fictitious paths plus 2 real paths from this repo. Pass criterion: codebase-claims lens flags exactly the 3 fictitious paths at Critical, and produces no Critical findings for the 2 real paths. Delete the throwaway from `/tmp/` after.
 - **Manual verification (dogfooding):** run `/review-plan` against this very plan once Phase 2 has landed; run `/dev-plan create feature dummy-test` once Phase 4 has landed.
-- **Cross-harness rubric parity (automated):** `just check-prompt-parity` (added in Phase 1) diffs the rubric files between `.claude/skills/<skill>/rubric.md` and `.codex/skills/<skill>/rubric.md` and fails on divergence.
+- **Cross-harness rubric parity (automated):** `just check-prompt-parity` (added in Phase 1) skips managed skills with no rubric on either side, fails when exactly one harness has a rubric for a managed skill, and diffs `.claude/skills/<skill>/rubric.md` against `.codex/skills/<skill>/rubric.md` when both exist.
 - **Manual verification (cross-harness prompt blocks):** directly compare the shared lens prompt bodies / finding-schema blocks inside `SKILL.md` across `.claude/` and `.codex/`. `just check-sync` checks repo-vs-global; `just check-prompt-parity` checks rubrics. The lens-prompt blocks inside `SKILL.md` are not script-checkable (mixed with harness-specific dispatch prose) and require eyeballing.
 - Final `just check-sync` to confirm mirror parity.
 
@@ -178,12 +178,13 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - **[CODEX]** `.codex/skills/review-plan/SKILL.md` — `spawn_agent` + in-session fallback
 - **[CLAUDE]** `.claude/skills/dev-plan/SKILL.md` — Explore Agent call on `create`
 - **[CODEX]** `.codex/skills/dev-plan/SKILL.md` — Explore equivalent on `create`
+- **[GENERIC]** `justfile` — `check-prompt-parity` recipe
 - **[GENERIC]** `README.md`, `AGENTS.md`, `.codex/AGENTS.md` — descriptive surfaces
 
 ### New Files to Create
 - **[GENERIC]** `.claude/skills/review-plan/rubric.md` and `.codex/skills/review-plan/rubric.md` — byte-identical
 - **[GENERIC]** `.claude/skills/dev-plan/rubric.md` and `.codex/skills/dev-plan/rubric.md` — byte-identical
-- **[GENERIC]** `scripts/check-prompt-parity.sh` — diffs paired rubrics across `.claude/` and `.codex/`; new `check-prompt-parity` justfile recipe wraps it
+- **[GENERIC]** `scripts/check-prompt-parity.sh` — skips managed skills without rubrics, fails one-sided rubrics, and diffs paired rubrics across `.claude/` and `.codex/`
 
 ### Architecture Decisions
 - **[GENERIC] Four lenses** — follows deep-review's multi-lens shape, but with review-plan-specific lens names and count; each lens has a distinct scope. `codebase-claims` is the cheap factual lens; the other three are judgment-heavy.
