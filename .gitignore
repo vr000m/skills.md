@@ -4,3 +4,4 @@
 .conduct/
 __pycache__/
 .pytest_cache/
+.conduct/
