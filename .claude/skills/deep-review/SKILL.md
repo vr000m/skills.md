@@ -27,7 +27,7 @@ If a plan file is supplied, treat it as the author-supplied review brief. If the
 
 ## Review State
 
-- Persist the latest run in `.deep-review/latest.json`.
+- Persist the latest run in `.deep-review/latest-claude.json`. Each runtime owns its own state file (Codex uses `.deep-review/latest-codex.json`) so concurrent or interleaved runs don't clobber each other's resume target. The `.deep-review/` directory is gitignored as a whole.
 - Keep the file local-only and gitignored.
 - Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, `review_focus_hash`, per-lens status, and the findings that were produced.
 - If the state file is missing, or `schema_version` is absent / does not match the current expected version (1), treat `--continue` as `--full` with a warning.
