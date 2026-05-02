@@ -372,7 +372,7 @@ Do not silently re-list prior findings as if they were freshly surfaced. The `(c
 - Do not reuse the parent conversation as context for the subagents.
 - Do not guess about specs or RFCs. The spec compliance lens only runs when the plan explicitly names them in `## Review Focus`.
 - If no `AGENTS.md` or no `## Review Checklist` section exists, proceed gracefully and note that no suppression source was available.
-- If `--continue` is requested, follow the two-mode rule in [Review State](#review-state): resume only failed/timed-out lenses when HEAD has not advanced; otherwise re-review the new commit range and list prior findings separately for reference.
+- If `--continue` is requested, follow the three-mode rule in [Review State](#review-state): resume only `errored`/`timed_out` lenses when HEAD has not advanced; otherwise re-review the new commit range and list prior findings separately for reference.
 - If `--full` is requested, ignore prior run state and start fresh.
 - Findings must include severity, category, file:line, evidence, and a concrete suggestion.
 - Triage outcomes are:
