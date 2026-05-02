@@ -41,6 +41,12 @@ before presenting findings to the user.
 
 ## Continuation Safety
 
-- If `--continue` was used and the diff or Review Focus changed, the run fell back to `--full` with
-  a warning
-- Stored state in `.deep-review/latest.json` matches the schema version
+- If `--continue` was used and stored `head_commit == HEAD`, only `timed_out` or `errored` lenses
+  were re-run; completed lens findings were reused
+- If `--continue` was used and `HEAD` advanced past the stored `head_commit`, all lenses re-ran over
+  the new range only and the report uses the continuation format with the `(continuation)` header,
+  an explicit "Range reviewed this run" line, and prior findings listed separately under
+  "Prior findings ... - verify these are addressed"
+- If stored `head_commit` is not an ancestor of `HEAD`, or `review_focus_hash` changed, the run fell
+  back to `--full` with a warning
+- Stored state in `.deep-review/latest-codex.json` matches the schema version

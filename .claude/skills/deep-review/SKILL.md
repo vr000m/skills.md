@@ -19,20 +19,26 @@ Run a thorough review by splitting the work into independent lenses. Each lens g
 1. If the first argument is a readable plan file path, load it as the review brief and use its `## Review Focus` section to steer lens prompts.
 2. If the first argument is `--pr` with a number (or a PR URL), review that PR's diff via `gh pr diff`.
 3. If the user provides another explicit target (file path, branch name, commit range), use it directly.
-4. If `--continue` or `--full` is the only argument, review the current branch diff against the merge base.
-5. If no argument is provided, review the current branch diff against the merge base.
+4. If `--continue` is the only argument, follow the continuation rules in [Review State](#review-state) — the diff range depends on prior state.
+5. If `--full` is the only argument, or no argument is provided, review the current branch diff against the merge base.
 6. If no target can be resolved, ask the user for a plan path or PR reference.
 
 If a plan file is supplied, treat it as the author-supplied review brief. If the plan's branch does not match the current branch or the requested PR, call out the mismatch before proceeding.
 
 ## Review State
 
-- Persist the latest run in `.deep-review/latest.json`.
+- Persist the latest run in `.deep-review/latest-claude.json`. Each runtime owns its own state file (Codex uses `.deep-review/latest-codex.json`) so concurrent or interleaved runs don't clobber each other's resume target. The `.deep-review/` directory is gitignored as a whole.
 - Keep the file local-only and gitignored.
 - Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, `review_focus_hash`, per-lens status, and the findings that were produced.
-- If `--continue` is requested and the stored snapshot does not match the current work (code diff or Review Focus content), warn the user and fall back to `--full`.
-- If `--continue` is requested and `schema_version` is absent or does not match the current expected version (1), warn and fall back to `--full`.
-- If the state file is missing, treat the run as `--full`.
+- If the state file is missing, or `schema_version` is absent / does not match the current expected version (1), treat `--continue` as `--full` with a warning.
+
+`--continue` has three modes, decided by comparing the stored `head_commit` to the current `HEAD`:
+
+1. **Resume incomplete run** — when stored `head_commit == HEAD`. Re-run only the lenses with status `errored` or `timed_out`; reuse completed lens findings as-is. Diff range stays `base_commit..head_commit`. Per-lens status enum: `completed | timed_out | errored | skipped`.
+2. **Incremental re-review** — when stored `head_commit` is an ancestor of `HEAD` (i.e. new commits have landed since the last run, typically fixes for prior findings). Re-run **all** lenses, but only over the new range `<stored.head_commit>..HEAD`. Prior findings are not re-checked; they are listed for reference in the report (see [Present Findings](#5-present-findings)).
+3. **Fall back to `--full`** — in any of the following cases. Warn the user and review the full `merge-base..HEAD` diff.
+   - Stored `head_commit` is NOT an ancestor of `HEAD` (force-push, rebase, branch switch).
+   - `review_focus_hash` no longer matches (the plan's `## Review Focus` section changed).
 
 Suggested schema:
 
@@ -340,13 +346,33 @@ Return findings in a structured report:
 
 If the review is clean, say so concisely and call out any residual risks or skipped lenses.
 
+**Continuation report format (incremental re-review mode only).** When `--continue` ran in incremental re-review mode (HEAD advanced past stored `head_commit`), the report header MUST make the scope explicit and partition findings:
+
+```markdown
+## Deep Review: [target] (continuation)
+
+**Range reviewed this run**: `<short_prev_head>..HEAD` (`<N>` new commits, `<M>` files)
+**Prior run**: `<run_id>` against `<short_prev_head>` — findings listed below for reference, NOT re-checked
+
+### New findings (from this run)
+
+#### Critical
+- ... (same finding format as above)
+
+### Prior findings (from run `<run_id>`) — verify these are addressed
+- **[Category]** [Severity]: [Finding] at [file:line]
+  - From the prior report; this run did not re-evaluate.
+```
+
+Do not silently re-list prior findings as if they were freshly surfaced. The `(continuation)` suffix on the header and the explicit "Range reviewed this run" line are required so the user can distinguish a fresh review from an incremental one at a glance.
+
 ## Deep Review Rules
 
 - Keep every lens independent.
 - Do not reuse the parent conversation as context for the subagents.
 - Do not guess about specs or RFCs. The spec compliance lens only runs when the plan explicitly names them in `## Review Focus`.
 - If no `AGENTS.md` or no `## Review Checklist` section exists, proceed gracefully and note that no suppression source was available.
-- If `--continue` is requested, rerun only failed or timed-out lenses and merge the new findings with the previous run.
+- If `--continue` is requested, follow the three-mode rule in [Review State](#review-state): resume only `errored`/`timed_out` lenses when HEAD has not advanced; otherwise re-review the new commit range and list prior findings separately for reference.
 - If `--full` is requested, ignore prior run state and start fresh.
 - Findings must include severity, category, file:line, evidence, and a concrete suggestion.
 - Triage outcomes are:
