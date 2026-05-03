@@ -26,8 +26,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [[ -f "$ROOT_DIR/.env" ]]; then
-	# shellcheck disable=SC1091
-	source "$ROOT_DIR/.env"
+	# Safelist parser: `source .env` is unsafe (executes arbitrary shell). Only
+	# pull the keys this script reads, and only when they look like a plain
+	# assignment to a quoted or bare value.
+	while IFS= read -r line; do
+		case "$line" in
+		MANAGED_SKILLS=*) eval "export $line" ;;
+		esac
+	done < <(grep -E '^(MANAGED_SKILLS)=' "$ROOT_DIR/.env" || true)
 fi
 
 MANAGED_SKILLS="${MANAGED_SKILLS:-conduct content-draft content-review deep-review dev-plan fan-out review-plan rfc-finder spec-compliance update-docs}"
@@ -36,6 +42,14 @@ PARITY_DIFF=0
 
 read -r -a managed_skills <<<"$MANAGED_SKILLS"
 for skill in "${managed_skills[@]}"; do
+	# Reject anything that isn't a plain skill name to block path traversal
+	# via .env-supplied MANAGED_SKILLS (e.g. "../../etc/passwd").
+	if [[ ! "$skill" =~ ^[A-Za-z0-9_-]+$ ]]; then
+		echo "drift: invalid skill name in MANAGED_SKILLS: $skill"
+		PARITY_DIFF=1
+		continue
+	fi
+
 	claude_rubric="$ROOT_DIR/.claude/skills/$skill/rubric.md"
 	codex_rubric="$ROOT_DIR/.codex/skills/$skill/rubric.md"
 
@@ -56,8 +70,15 @@ for skill in "${managed_skills[@]}"; do
 		continue
 	fi
 
-	if ! diff_output=$(diff -u "$claude_rubric" "$codex_rubric"); then
-		echo "drift: $skill rubric.md differs between .claude and .codex"
+	if diff_output=$(diff -u "$claude_rubric" "$codex_rubric" 2>&1); then
+		: # rubrics match
+	else
+		diff_rc=$?
+		if [[ $diff_rc -eq 1 ]]; then
+			echo "drift: $skill rubric.md differs between .claude and .codex"
+		else
+			echo "error: diff failed for $skill rubric.md (exit $diff_rc)"
+		fi
 		echo "$diff_output"
 		PARITY_DIFF=1
 	fi

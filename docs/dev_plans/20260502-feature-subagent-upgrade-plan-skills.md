@@ -258,7 +258,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - [x] Phase 3: [CODEX] review-plan spawn_agent dispatch with in-session fallback
 - [x] Phase 4: [CLAUDE] dev-plan Explore subagent
 - [x] Phase 5: [CODEX] dev-plan Explore equivalent
-- [ ] Phase 6: [GENERIC] Docs, promotion, manual verification
+- [x] Phase 6: [GENERIC] Docs, promotion, manual verification
 
 ## Findings
 
