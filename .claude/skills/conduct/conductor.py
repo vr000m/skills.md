@@ -26,9 +26,9 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from lock import StateLock
 from marker import compute_plan_hash, marker_is_stale, read_marker
@@ -450,9 +450,7 @@ def _run_phase(
             else:
                 impl_report = None
             if test_text is not None:
-                test_report = parse_report(test_text, "test-writer")
-            else:
-                test_report = None
+                parse_report(test_text, "test-writer")
         except SchemaError as exc:
             state["status"] = "schema_error"
             state["blocker"] = str(exc)

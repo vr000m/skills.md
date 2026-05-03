@@ -27,7 +27,7 @@ Gradeable criteria for evaluating a completed compliance report. Doubles as a Ma
 
 ## Report Structure
 
-- Status icons prefix every finding (✅ ❌ ⚠️ ➖)
+- Status icons prefix every finding (✅ Met, ❌ Missing, ⚠️ Partial, ➖ N/A)
 - Findings are grouped by requirement level (MUST first, then SHOULD, then MAY)
 - Summary table includes all three rows (MUST/SHOULD/MAY) even when a level has zero requirements
 - The spec section URL is linked

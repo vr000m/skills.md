@@ -41,4 +41,4 @@ Gradeable criteria for evaluating a completed deep-review report. Doubles as a M
 - If `--continue` was used and stored `head_commit == HEAD`, only `errored`/`timed_out` lenses were re-run; completed lens findings were reused
 - If `--continue` was used and `HEAD` advanced past the stored `head_commit` (incremental re-review), all lenses re-ran over the new range only and the report uses the continuation format with the `(continuation)` header, an explicit "Range reviewed this run" line, and prior findings listed separately under "Prior findings ... — verify these are addressed"
 - If stored `head_commit` is not an ancestor of `HEAD` (force-push, rebase) or `review_focus_hash` changed, the run fell back to `--full` with a warning
-- Stored state in `.deep-review/latest-claude.json` matches the schema version
+- Stored state in the per-harness `.deep-review/latest-*.json` file matches the schema version

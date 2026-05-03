@@ -18,8 +18,8 @@
 
 Recommended development workflow using skills:
 
-1. `/dev-plan create feature xyz` — Create the plan
-2. `/review-plan` — Audit plan for gaps and undocumented assumptions (blocks until complete)
+1. `/dev-plan create feature xyz` — Create the plan; on `create` only, runs one Explore step via `spawn_agent` with `gpt-5.4-mini` when available (inline fact-gathering fallback otherwise) that returns structured codebase facts (verified paths, observed patterns, dependency versions) which land above the review marker. `update` and `complete` do not re-explore
+2. `/review-plan` — Audit the plan by dispatching four parallel `spawn_agent` lens workers (`architecture`, `sequencing`, `spec-and-testing`, `codebase-claims`) when available, with sequential in-session fallback labelled best-effort isolation; merges findings by severity and blocks until complete. Cost: three high-reasoning `gpt-5.4` lenses plus one cheap `gpt-5.4-mini` factual lens per run
 3. Address review findings, update plan as needed
 4. `/fan-out` — Fan out independent tasks to parallel agents (or implement manually)
 5. `/deep-review` — Run the multi-lens review before merge
