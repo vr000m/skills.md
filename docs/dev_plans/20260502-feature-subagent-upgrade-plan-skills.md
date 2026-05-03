@@ -154,6 +154,7 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 
 - Add the same Explore step using `spawn_agent` with `gpt-5.4-mini` if available, otherwise inline fact-gathering with the same prompt + structured-fact contract.
 - Do not fork parent conversation context into the spawned Explore worker; pass only the user request, discovered repo basics, and the Explore prompt.
+- Add a concise Explore cost note in the YAML `description` string and a longer "Cost" section in the body, matching the generic cost-discipline contract for `dev-plan create`.
 - Same scope rules: above the marker, create-only.
 
 ### Phase 6: [GENERIC] Docs, promotion, manual verification
@@ -246,16 +247,16 @@ Phases that touch one harness commit `.claude/` and `.codex/` together so interm
 - **[CODEX]** review-plan dispatches via parallel `spawn_agent` calls when available, with in-session sequential fallback that uses identical prompts and schema and labels isolation as best-effort.
 - **[CODEX]** dev-plan Explore uses `spawn_agent` with `gpt-5.4-mini` when available, otherwise inline fact-gathering with the same prompt/schema.
 - Code reviewed (`/review`, `/security-review`, `/deep-review`) and approved before merge.
+<!-- reviewed: 2026-05-03 @ dbbef4854243c2ea57de39d2029aaa2f241ec1e6 -->
 
-<!-- reviewed: 2026-05-02 @ e0a6cccb89d567a79e95f7b12bbe332d83da15d3 -->
 <!-- /review-plan writes the marker line above. Everything below is the workspace: edits here do NOT invalidate the marker. -->
 
 ## Progress
 
 - [x] Phase 1: [GENERIC] Lens contract + rubrics
-- [ ] Phase 2: [CLAUDE] review-plan parallel-Agent dispatch
+- [x] Phase 2: [CLAUDE] review-plan parallel-Agent dispatch
 - [ ] Phase 3: [CODEX] review-plan spawn_agent dispatch with in-session fallback
-- [ ] Phase 4: [CLAUDE] dev-plan Explore subagent
+- [x] Phase 4: [CLAUDE] dev-plan Explore subagent
 - [ ] Phase 5: [CODEX] dev-plan Explore equivalent
 - [ ] Phase 6: [GENERIC] Docs, promotion, manual verification
 
