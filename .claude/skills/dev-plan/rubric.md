@@ -1,6 +1,6 @@
 # Dev-Plan Explore Output Rubric
 
-Gradeable criteria for the structured-fact output produced by the dev-plan Explore subagent. The main agent self-checks Explore output against this rubric before weaving facts into the Technical Specifications and Files-to-Modify sections of the plan. Mirrored byte-identically in `.claude/skills/dev-plan/rubric.md` and `.codex/skills/dev-plan/rubric.md`.
+Gradeable criteria for the structured-fact output produced by the dev-plan Explore subagent. The main agent self-checks Explore output against this rubric before weaving facts into the Technical Specifications and Files-to-Modify sections of the plan. Intended to be mirrored byte-identically — see `CODEX_MIRROR_BACKLOG.md` for current drift.
 
 ## Scope Discipline
 
@@ -40,3 +40,7 @@ Gradeable criteria for the structured-fact output produced by the dev-plan Explo
 - Output is markdown or a clearly delineated list with the three fact categories as headings
 - Each fact is one line or one short bullet — no narrative paragraphs
 - Markdown is well-formed and renders cleanly
+
+## Git Ref Coverage
+
+- Git refs (tags, branches, commits) referenced in the request are listed as verified or unverified with point-in-time disclaimer; ref drift after create does not force re-review (asymmetric to paths/patterns/dependencies, which do).
