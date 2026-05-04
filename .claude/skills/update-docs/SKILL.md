@@ -90,6 +90,84 @@ Check:
 - [ ] **Stale references** — do file paths, method names, or config keys in the plan match the code?
 - [ ] **Stale descriptions** — do technical-spec tables, authority decisions, and prose summaries still accurately describe what each file does in the current diff? Re-read each row/statement against the actual code, not just the path.
 
+#### Sibling-plan audit (extend the audit pass — do NOT add a parallel grep)
+
+**Only run if the invocation is tied to a dev plan** (i.e., a primary plan was located above). Skip entirely otherwise.
+
+**Audit scope:** Scan `docs/dev_plans/*.md` only (or the project's configured plans directory). **Exclude `tests/fixtures/dev_plans/` by default** — fixture trees are not real plans and must not pollute sibling matches.
+
+**Determine the primary plan's slug:**
+1. If the primary plan filename matches `YYYYMMDD-<type>-<rest>.md` (where `<type>` is one of `feature`, `bug`, `chore`, `docs`, `design`, `refactor`), strip the date prefix and the leading type token — **but only when the remainder has ≥2 hyphen-delimited tokens**. If stripping would leave fewer than two tokens (e.g. `20260504-feature-feature.md` where the second token is genuinely `feature`), keep the type token in the slug. The remaining hyphen-delimited string is the **tokenisation slug**. Example: `20260504-feature-skill-improvements-from-usage-report.md` → slug `skill-improvements-from-usage-report`, tokens `[skill, improvements, from, usage, report]`.
+2. If the filename does NOT match the `YYYYMMDD-` convention (hand-named plan), use the full basename minus `.md` as the slug. Log a one-line note: `audit: filename-convention fallback used for <filename>`.
+
+**Slug match (for each candidate sibling plan, excluding the primary):**
+- Tokenise the sibling's slug by the same rule above.
+- A sibling matches if: (a) its full stripped slug equals the primary's full stripped slug, OR (b) any contiguous substring of ≥3 hyphen-delimited tokens from the primary's slug appears in the sibling's token sequence.
+- No stop-word filtering — every token is significant.
+- **Recall trade-off (deliberate):** ≥3 contiguous tokens means siblings sharing only 2 tokens (e.g. `[skill, improvements]`) are NOT slug-matched even when they're plausibly related. This is intentional — slug match is a high-precision signal; the **component match** (primary's `Files to Modify` paths → sibling body) is the recall safety net for short-slug cases. If both miss, the relationship is genuinely tenuous and the audit's silence is the right answer.
+
+**Component match (only when the primary plan has a `Files to Modify` section):**
+- Extract all file paths listed under `Files to Modify` in the primary plan.
+- For each sibling plan, do a case-insensitive substring search: check whether any of those paths appears anywhere in the sibling's body text.
+- If the primary plan has no `Files to Modify` section, skip component match entirely; slug match still runs.
+
+**Surfacing (non-blocking):**
+- If any sibling matches (by slug OR component), print:
+  ```
+  candidate sibling plans — also touch?
+    <relative-path>  [slug match | component match | both]
+  ```
+  Then proceed; do not halt.
+- If no siblings match, print the sentinel exactly:
+  ```
+  audit: no sibling plans matched
+  ```
+
+**Commit-preamble:**
+- For each candidate sibling that was surfaced but NOT updated in this run, append to the commit-message preamble:
+  ```
+  skipped: <slug> (<reason>)
+  ```
+  Example reason: "not updated — no related changes in this diff".
+- When no candidates were surfaced, include no audit lines in the preamble.
+
+#### Sibling-plan audit — worked example
+
+**Primary plan:** `docs/dev_plans/20260504-feature-skill-improvements-from-usage-report.md`
+- Date-prefix stripped: `feature-skill-improvements-from-usage-report`
+- Type-token stripped: `skill-improvements-from-usage-report`
+- Tokens: `[skill, improvements, from, usage, report]`
+
+**Primary plan's `Files to Modify`:**
+```
+- .claude/skills/update-docs/SKILL.md
+- .claude/skills/deep-review/SKILL.md
+- .claude/skills/deep-review/rubric.md
+```
+
+**Candidate sibling A:** `docs/dev_plans/20260301-chore-usage-report-cleanup.md`
+- Stripped slug: `usage-report-cleanup`, tokens: `[usage, report, cleanup]`
+- Slug check: contiguous 3-token window `[usage, report]` is only 2 tokens — no 3-token window overlaps. **No slug match.**
+- Component check: body of sibling A contains the string `update-docs/SKILL.md` (case-insensitive). **Component match.**
+
+**Candidate sibling B:** `docs/dev_plans/20260210-feature-skill-improvements-deep-review.md`
+- Stripped slug: `skill-improvements-deep-review`, tokens: `[skill, improvements, deep, review]`
+- Slug check: primary tokens `[skill, improvements, from]` (3-token window) — not in sibling. Primary tokens `[skill, improvements]` — only 2 tokens. Try `[skill, improvements, from, usage, report]` substring in sibling's `[skill, improvements, deep, review]`: the 3-token window `[skill, improvements, from]` is not present. But `[skill, improvements]` matches the first two tokens of sibling — only 2, no match. **No slug match** (no 3-token contiguous overlap).
+- Component check: body of sibling B contains the path `.claude/skills/deep-review/rubric.md`. **Component match.**
+
+**Output printed:**
+```
+candidate sibling plans — also touch?
+  docs/dev_plans/20260301-chore-usage-report-cleanup.md  [component match]
+  docs/dev_plans/20260210-feature-skill-improvements-deep-review.md  [component match]
+```
+
+**Commit-message preamble lines appended (if neither sibling was updated):**
+```
+skipped: usage-report-cleanup (not updated — no related changes in this diff)
+skipped: skill-improvements-deep-review (not updated — no related changes in this diff)
+```
+
 ### Changelog (`CHANGELOG.md`)
 Check:
 - [ ] **Missing version section** — if the branch introduces a version bump (check `pyproject.toml`, `package.json`, `Cargo.toml`, `version.py`, etc.), is there a corresponding `## [x.y.z]` section?
@@ -166,8 +244,11 @@ Before spawning the subagent, the main context must:
    if [ -z "$BASE" ]; then
      if git show-ref --verify --quiet refs/heads/main; then BASE=main
      elif git show-ref --verify --quiet refs/heads/master; then BASE=master
-     else BASE=$(git for-each-ref --format='%(refname:short)' refs/heads | head -n 1); fi
+     else BASE=""; fi
    fi
+   # If neither origin/HEAD nor a local main/master exists, leave BASE empty
+   # rather than falling back to the lexicographically-first local branch
+   # (which would spuriously match the current feature branch on single-branch repos).
    CURRENT=$(git branch --show-current)
    ```
 2. Detect PR number (if `--pr` flag or branch has an open PR).

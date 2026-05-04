@@ -32,6 +32,12 @@ If a plan file is supplied, treat it as the author-supplied review brief. If the
 - Store `run_id`, `base_commit`, `head_commit`, `diff_hash`, `review_focus_hash`, per-lens status, and the findings that were produced.
 - If the state file is missing, or `schema_version` is absent / does not match the current expected version (1), treat `--continue` as `--full` with a warning.
 
+### Worktree Identity
+
+Branch identity is resolved **every invocation** via `git rev-parse --show-toplevel` (to obtain the worktree root) and `git branch --show-current` (to obtain the active branch), run from the current working directory at invocation time. Any harness-cached branch state is ignored — this skill explicitly does not consult it. If the Claude harness exposes no such cache surface, this is a no-op contract (there is no cache surface to bypass; per-invocation resolution is the only path). This ensures that when multiple Claude sessions share a repository via separate `git worktree`s, each invocation anchors its identity to the correct worktree rather than relying on any stale cached value.
+
+> **Note on trunk-resolution snippet duplication.** The `git symbolic-ref refs/remotes/origin/HEAD` + main/master fallback snippet below is duplicated verbatim from `update-docs/SKILL.md`. SKILL.md files are prose prompts with no include mechanism in this repo, so duplication is the available pattern. If a third skill needs trunk resolution, copy the snippet verbatim from `update-docs/SKILL.md` and add a grep-based parity check in `scripts/` to keep the copies in sync.
+
 `--continue` has three modes, decided by comparing the stored `head_commit` to the current `HEAD`:
 
 1. **Resume incomplete run** — when stored `head_commit == HEAD`. Re-run only the lenses with status `errored` or `timed_out`; reuse completed lens findings as-is. Diff range stays `base_commit..head_commit`. Per-lens status enum: `completed | timed_out | errored | skipped`.
@@ -78,9 +84,75 @@ This skill spawns one subagent per lens, each with **isolated context** (no pare
 
 ## Workflow
 
+### 0. Resolve Identity and Check Scope (run before writing any state)
+
+Before doing anything else — and **before writing or updating `.deep-review/latest-claude.json`** — resolve worktree identity and validate scope:
+
+1. **Resolve worktree identity:**
+   ```
+   WORKTREE_ROOT=$(git rev-parse --show-toplevel)
+   BRANCH=$(git branch --show-current)
+   ```
+   If `$BRANCH` is empty (detached HEAD), use `(detached HEAD @ <short-sha>)` in place of `<branch>` in the §1a banner, and **skip** the trunk-vs-trunk halt below — a detached HEAD is by definition not a checked-out trunk branch.
+
+2. **Trunk-vs-trunk halt.** When invoked without `--pr` or `--continue` AND `$BRANCH` is non-empty, detect whether the current branch is trunk:
+   ```
+   BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+   if [ -z "$BASE" ]; then
+     if git show-ref --verify --quiet refs/heads/main; then BASE=main
+     elif git show-ref --verify --quiet refs/heads/master; then BASE=master
+     else BASE=""; fi
+   fi
+   ```
+   If neither `origin/HEAD` nor a local `main`/`master` exists, treat the repo as having no configured trunk and skip the halt entirely (do **not** fall back to the lexicographically-first local branch — that would spuriously halt single-branch repos where the only branch is the feature branch).
+   If `$BASE` is non-empty and `$BRANCH == $BASE`, **halt immediately** with:
+   ```
+   Refusing to review trunk against itself — pass --pr <N> or check out a feature branch.
+   ```
+   The halt fires **before** any `.deep-review/latest-claude.json` write. A subsequent `--continue` from a feature branch must not be poisoned by a prior aborted trunk invocation.
+
+Concurrent-worktree detection happens inline in §1a (single `git worktree list` call there) rather than crossing a section boundary — the prior split risked silently dropping the informational line if §1a was reordered or skipped.
+
 ### 1. Announce the Run
 
 Print a single-line summary of which lenses will run and which model each uses. If the spec compliance lens is skipped because the plan has no `## Review Focus` specs or RFCs, say that on the same line. Then proceed immediately — no confirmation prompt. The user can interrupt at any time if they need to abort.
+
+### 1a. Pre-dispatch Banner
+
+**Before spawning any lens subagents**, print the resolved-range banner. This is the "Confirm scope before dispatch" gate — the banner output is the proceed signal.
+
+**Resolve the diff range** based on the current mode:
+
+- **`--continue` resume mode** (HEAD == stored `head_commit`, state file present, schema version matches): banner shows the **stored** range with a `(resume)` tag:
+  ```
+  Reviewing: <branch> @ <worktree-root> | <stored-base>..<stored-head> (<N> commits, <M> files) (resume)
+  ```
+- **`--continue` schema-mismatch or missing-state-file fallback**: print the schema-mismatch warning first, then behave as `--full` — fresh-resolved range, no `(resume)` tag:
+  ```
+  Warning: state file missing or schema mismatch — falling back to full review.
+  Reviewing: <branch> @ <worktree-root> | <merge-base>..<HEAD> (<N> commits, <M> files)
+  ```
+- **`--continue` force-push/rebase/branch-switch fallback** (stored `head_commit` is not an ancestor of `HEAD`): print the existing fallback warning and **append** the resolved-range banner:
+  ```
+  Warning: stored head is not an ancestor of HEAD (force-push, rebase, or branch switch) — falling back to full review.
+  Reviewing: <branch> @ <worktree-root> | <merge-base>..<HEAD> (<N> commits, <M> files)
+  ```
+- **`--pr <N>` mode**: `<base>..<head>` resolves to `origin/<base-branch>..<pr-head-sha>` (the GitHub PR base and head):
+  ```
+  Reviewing: <branch> @ <worktree-root> | origin/<base-branch>..<pr-head-sha> (<N> commits, <M> files)
+  ```
+- **Full or incremental modes** (no prior state or HEAD advanced): fresh-resolved range:
+  ```
+  Reviewing: <branch> @ <worktree-root> | <base>..<head> (<N> commits, <M> files)
+  ```
+
+**Concurrent-worktree informational line.** Run `git worktree list` here (single call, inline — do not split detection across sections). If the output has more than one active worktree, append a second line immediately after the banner:
+```
+Other worktrees present (informational): <count> (<root1>, <root2>, ...); anchored to <worktree-root>
+```
+Use the word "informational" (not "warning") — this is context, not an error. The list of other worktrees is included so the user can confirm the correct one is active.
+
+After printing the banner (and the optional informational line), proceed with the run. The banner is the confirm-scope gate; no additional prompt is needed.
 
 ### 2. Spawn Fresh-Context Subagents
 
