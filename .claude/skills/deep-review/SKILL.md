@@ -93,8 +93,9 @@ Before doing anything else — and **before writing or updating `.deep-review/la
    WORKTREE_ROOT=$(git rev-parse --show-toplevel)
    BRANCH=$(git branch --show-current)
    ```
+   If `$BRANCH` is empty (detached HEAD), use `(detached HEAD @ <short-sha>)` in place of `<branch>` in the §1a banner, and **skip** the trunk-vs-trunk halt below — a detached HEAD is by definition not a checked-out trunk branch.
 
-2. **Trunk-vs-trunk halt.** When invoked without `--pr` or `--continue`, detect whether the current branch is trunk:
+2. **Trunk-vs-trunk halt.** When invoked without `--pr` or `--continue` AND `$BRANCH` is non-empty, detect whether the current branch is trunk:
    ```
    BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
    if [ -z "$BASE" ]; then
@@ -110,7 +111,7 @@ Before doing anything else — and **before writing or updating `.deep-review/la
    ```
    The halt fires **before** any `.deep-review/latest-claude.json` write. A subsequent `--continue` from a feature branch must not be poisoned by a prior aborted trunk invocation.
 
-3. **Concurrent-worktree detection.** Run `git worktree list` and remember the result for the banner step (§1a) — the actual line is **printed there**, not here, to avoid a double-print. This step records the fact, the banner emits it.
+Concurrent-worktree detection happens inline in §1a (single `git worktree list` call there) rather than crossing a section boundary — the prior split risked silently dropping the informational line if §1a was reordered or skipped.
 
 ### 1. Announce the Run
 
@@ -145,7 +146,7 @@ Print a single-line summary of which lenses will run and which model each uses. 
   Reviewing: <branch> @ <worktree-root> | <base>..<head> (<N> commits, <M> files)
   ```
 
-**Concurrent-worktree informational line.** If `git worktree list` returned more than one active worktree, append a second line immediately after the banner:
+**Concurrent-worktree informational line.** Run `git worktree list` here (single call, inline — do not split detection across sections). If the output has more than one active worktree, append a second line immediately after the banner:
 ```
 Other worktrees present (informational): <count> (<root1>, <root2>, ...); anchored to <worktree-root>
 ```

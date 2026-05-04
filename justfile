@@ -19,6 +19,10 @@ check-sync:
 check-prompt-parity:
     ./scripts/check-prompt-parity.sh
 
+# Verify the trunk-resolution snippet is byte-identical across SKILL.md copies
+check-trunk-snippet-parity:
+    ./scripts/check-trunk-snippet-parity.sh
+
 lint-scripts:
     shellcheck scripts/*.sh
     shfmt -d scripts/*.sh

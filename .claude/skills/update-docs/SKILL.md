@@ -97,13 +97,14 @@ Check:
 **Audit scope:** Scan `docs/dev_plans/*.md` only (or the project's configured plans directory). **Exclude `tests/fixtures/dev_plans/` by default** — fixture trees are not real plans and must not pollute sibling matches.
 
 **Determine the primary plan's slug:**
-1. If the primary plan filename matches `YYYYMMDD-<type>-<rest>.md` (where `<type>` is one of `feature`, `bug`, `chore`, `docs`, `design`, `refactor`), strip the date prefix and the leading type token. The remaining hyphen-delimited string is the **tokenisation slug**. Example: `20260504-feature-skill-improvements-from-usage-report.md` → slug `skill-improvements-from-usage-report`, tokens `[skill, improvements, from, usage, report]`.
+1. If the primary plan filename matches `YYYYMMDD-<type>-<rest>.md` (where `<type>` is one of `feature`, `bug`, `chore`, `docs`, `design`, `refactor`), strip the date prefix and the leading type token — **but only when the remainder has ≥2 hyphen-delimited tokens**. If stripping would leave fewer than two tokens (e.g. `20260504-feature-feature.md` where the second token is genuinely `feature`), keep the type token in the slug. The remaining hyphen-delimited string is the **tokenisation slug**. Example: `20260504-feature-skill-improvements-from-usage-report.md` → slug `skill-improvements-from-usage-report`, tokens `[skill, improvements, from, usage, report]`.
 2. If the filename does NOT match the `YYYYMMDD-` convention (hand-named plan), use the full basename minus `.md` as the slug. Log a one-line note: `audit: filename-convention fallback used for <filename>`.
 
 **Slug match (for each candidate sibling plan, excluding the primary):**
 - Tokenise the sibling's slug by the same rule above.
 - A sibling matches if: (a) its full stripped slug equals the primary's full stripped slug, OR (b) any contiguous substring of ≥3 hyphen-delimited tokens from the primary's slug appears in the sibling's token sequence.
 - No stop-word filtering — every token is significant.
+- **Recall trade-off (deliberate):** ≥3 contiguous tokens means siblings sharing only 2 tokens (e.g. `[skill, improvements]`) are NOT slug-matched even when they're plausibly related. This is intentional — slug match is a high-precision signal; the **component match** (primary's `Files to Modify` paths → sibling body) is the recall safety net for short-slug cases. If both miss, the relationship is genuinely tenuous and the audit's silence is the right answer.
 
 **Component match (only when the primary plan has a `Files to Modify` section):**
 - Extract all file paths listed under `Files to Modify` in the primary plan.
@@ -243,8 +244,11 @@ Before spawning the subagent, the main context must:
    if [ -z "$BASE" ]; then
      if git show-ref --verify --quiet refs/heads/main; then BASE=main
      elif git show-ref --verify --quiet refs/heads/master; then BASE=master
-     else BASE=$(git for-each-ref --format='%(refname:short)' refs/heads | head -n 1); fi
+     else BASE=""; fi
    fi
+   # If neither origin/HEAD nor a local main/master exists, leave BASE empty
+   # rather than falling back to the lexicographically-first local branch
+   # (which would spuriously match the current feature branch on single-branch repos).
    CURRENT=$(git branch --show-current)
    ```
 2. Detect PR number (if `--pr` flag or branch has an open PR).

@@ -241,11 +241,12 @@ The three fixes are independent; they ship in one PR, one commit per skill. No d
 ## Progress
 
 - [x] Phase 0: Pre-flight (commit `93d5e66`)
-- [ ] Phase 1: `deep-review` diff-scope + worktree-identity preflight
-- [ ] Phase 2: `dev-plan` Explore git-ref category
-- [ ] Phase 3: `update-docs` sibling-slug audit extension
-- [ ] Phase 4: Pre-merge code review
-- [ ] Phase 5: Status flip + PR (terminal `/conduct` phase)
+- [x] Phase 1: `deep-review` diff-scope + worktree-identity preflight (commit `c318c2f`)
+- [x] Phase 2: `dev-plan` Explore git-ref category (commit `5e8f6ac`)
+- [x] Phase 3: `update-docs` sibling-slug audit extension (commit `4131fd9`)
+- [x] Phase 4: Pre-merge code review (fix-up commit `bbf3c1a`; review iteration 1/1)
+- [x] Phase 5: Status flip + PR (commits `1536ec8`, `61dc2cd`; PR #16)
+- [ ] Phase 6: Post-merge — promotion, behavioral verification, badge flip *(manual, post-merge)*
 
 ## Findings
 
@@ -266,6 +267,17 @@ Re-review iteration: 1/1.
 - *Schema-mismatch + missing-state-file merged in §1a row 2.* The reviewer flagged that the plan distinguishes the two cases. **Rationale**: the existing `Review State` section (line 33) already treats them identically ("If the state file is missing, or `schema_version` is absent / does not match the current expected version (1), treat `--continue` as `--full` with a warning"). Merging them in the new banner row preserves consistency with the pre-existing contract. Splitting would require a corresponding split in `Review State`, which expands scope.
 - *update-docs worked-example intermediate reasoning is muddled.* Conclusion is correct (no slug match), only the explanatory sentence is loose. Cosmetic; deferred to a future docs polish pass.
 - *README row shows "Not Started" while Phases 1–3 are implemented.* Expected per the plan — Phase 5 flips status to "In Review" once the PR is opened.
+
+### Post-Phase-5 deep-review pass (2026-05-04)
+
+Run on the full PR diff after Phase 5. **Critical: 0; Important: 3; Minor: 2.** All five fixed in one fix-up commit on the PR.
+
+**Fixed**:
+- *deep-review §0/§1a — detached HEAD case.* `BRANCH=""` would print a banner with an empty branch field. Fix: §0 step 1 now states "if `$BRANCH` is empty, use `(detached HEAD @ <short-sha>)` in the banner and skip the trunk-vs-trunk halt"; §0 step 2 gates on `$BRANCH` non-empty.
+- *update-docs slug-match — type-prefix double-strip.* `20260504-feature-feature.md` would lose a genuine `feature` token. Fix: only strip the leading type token when the remainder still has ≥2 tokens.
+- *update-docs slug-match — recall trade-off undocumented.* The ≥3-token rule is deliberate (high-precision signal; component match is the recall safety net) but wasn't stated. Fix: explicit "Recall trade-off (deliberate)" paragraph added.
+- *deep-review §0/§1a — implicit cross-section state.* §0 step 3 said "remember for §1a" with risk of silent drop on reordering. Fix: §0 step 3 deleted; `git worktree list` is now called once inline in §1a.
+- *Trunk-resolution snippet duplication — no parity gate.* Fix: added `scripts/check-trunk-snippet-parity.sh` + `just check-trunk-snippet-parity` recipe. The check immediately surfaced real drift (update-docs still had the buggy `for-each-ref | head -n 1` fallback that Phase 4 fixed in deep-review). Aligned update-docs to the safer `BASE=""` behaviour.
 
 ## Issues & Solutions
 
