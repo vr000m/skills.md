@@ -268,6 +268,16 @@ Re-review iteration: 1/1.
 - *update-docs worked-example intermediate reasoning is muddled.* Conclusion is correct (no slug match), only the explanatory sentence is loose. Cosmetic; deferred to a future docs polish pass.
 - *README row shows "Not Started" while Phases 1–3 are implemented.* Expected per the plan — Phase 5 flips status to "In Review" once the PR is opened.
 
+### Codex mirror work deferred (2026-05-04)
+
+User credits exhausted for this week — Codex mirror work resumes **after 2026-05-06**. This is already the structural plan (`.codex/` edits are `[CODEX-DEFERRED]` throughout, tracked in `CODEX_MIRROR_BACKLOG.md` to be created in Phase 6). The deferral is on the maintainer's calendar, not the plan: no scope change.
+
+**Pick-up checklist for the next session:**
+- Mirror the five `.codex/` files: `.codex/skills/{deep-review,dev-plan,update-docs}/SKILL.md` and `.codex/skills/{deep-review,dev-plan}/rubric.md`.
+- Re-run `just check-prompt-parity` until clean for `deep-review` and `dev-plan`.
+- Re-run `just check-trunk-snippet-parity` if the Codex mirrors of `deep-review`/`update-docs` carry the same snippet — extend `TARGETS` in the script if so.
+- Then proceed with Phase 6 (post-merge promotion + behavioural verification + badge flips).
+
 ### Post-Phase-5 deep-review pass (2026-05-04)
 
 Run on the full PR diff after Phase 5. **Critical: 0; Important: 3; Minor: 2.** All five fixed in one fix-up commit on the PR.
