@@ -100,16 +100,17 @@ Before doing anything else — and **before writing or updating `.deep-review/la
    if [ -z "$BASE" ]; then
      if git show-ref --verify --quiet refs/heads/main; then BASE=main
      elif git show-ref --verify --quiet refs/heads/master; then BASE=master
-     else BASE=$(git for-each-ref --format='%(refname:short)' refs/heads | head -n 1); fi
+     else BASE=""; fi
    fi
    ```
-   If `$BRANCH == $BASE`, **halt immediately** with:
+   If neither `origin/HEAD` nor a local `main`/`master` exists, treat the repo as having no configured trunk and skip the halt entirely (do **not** fall back to the lexicographically-first local branch — that would spuriously halt single-branch repos where the only branch is the feature branch).
+   If `$BASE` is non-empty and `$BRANCH == $BASE`, **halt immediately** with:
    ```
    Refusing to review trunk against itself — pass --pr <N> or check out a feature branch.
    ```
    The halt fires **before** any `.deep-review/latest-claude.json` write. A subsequent `--continue` from a feature branch must not be poisoned by a prior aborted trunk invocation.
 
-3. **Concurrent-worktree informational line.** Run `git worktree list`. If the output has more than one line (i.e., more than one active worktree), note this as informational context — it does not block the run.
+3. **Concurrent-worktree detection.** Run `git worktree list` and remember the result for the banner step (§1a) — the actual line is **printed there**, not here, to avoid a double-print. This step records the fact, the banner emits it.
 
 ### 1. Announce the Run
 

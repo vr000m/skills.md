@@ -5,7 +5,7 @@ Gradeable criteria for the structured-fact output produced by the dev-plan Explo
 ## Scope Discipline
 
 - Output is structured facts only — no plan prose, no recommendations, no phase drafts
-- Three fact categories only: verified paths, observed patterns, dependency versions
+- Four fact categories only: verified paths, observed patterns, dependency versions, verified git refs
 - Explore does not propose architecture, sequencing, or test strategy — those belong to the main agent
 - Explore does not invent or infer paths it did not directly verify
 
@@ -37,7 +37,7 @@ Gradeable criteria for the structured-fact output produced by the dev-plan Explo
 
 ## Output Structure
 
-- Output is markdown or a clearly delineated list with the three fact categories as headings
+- Output is markdown or a clearly delineated list with the four fact categories as headings
 - Each fact is one line or one short bullet — no narrative paragraphs
 - Markdown is well-formed and renders cleanly
 
