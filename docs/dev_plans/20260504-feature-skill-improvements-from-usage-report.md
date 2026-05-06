@@ -246,7 +246,7 @@ The three fixes are independent; they ship in one PR, one commit per skill. No d
 - [x] Phase 3: `update-docs` sibling-slug audit extension (commit `4131fd9`)
 - [x] Phase 4: Pre-merge code review (fix-up commit `bbf3c1a`; review iteration 1/1)
 - [x] Phase 5: Status flip + PR (commits `1536ec8`, `61dc2cd`; PR #16)
-- [ ] Phase 6: Post-merge — promotion, behavioral verification, badge flip *(manual, post-merge)*
+- [ ] Phase 6: Post-merge — promotion, behavioral verification, badge flip *(manual, post-merge; Codex mirror parity completed 2026-05-06, Claude runtime fixtures/badge flip not re-run by Codex)*
 
 ## Findings
 
@@ -277,6 +277,31 @@ User credits exhausted for this week — Codex mirror work resumes **after 2026-
 - Re-run `just check-prompt-parity` until clean for `deep-review` and `dev-plan`.
 - Re-run `just check-trunk-snippet-parity` if the Codex mirrors of `deep-review`/`update-docs` carry the same snippet — extend `TARGETS` in the script if so.
 - Then proceed with Phase 6 (post-merge promotion + behavioural verification + badge flips).
+
+### Codex mirror parity completed (2026-05-06)
+
+Codex adapted the PR #16 Claude-side changes into the Codex skill mirrors, preserving byte-identical rubric parity and shared generic prompt blocks while keeping Codex-native `spawn_agent`, model-tier, and `.deep-review/latest-codex.json` wording where the harnesses legitimately diverge.
+
+**Files mirrored/adapted:**
+- `.codex/skills/deep-review/SKILL.md`
+- `.codex/skills/deep-review/rubric.md`
+- `.codex/skills/dev-plan/SKILL.md`
+- `.codex/skills/dev-plan/rubric.md`
+- `.codex/skills/update-docs/SKILL.md`
+- `scripts/check-trunk-snippet-parity.sh` now includes the Codex deep-review and update-docs copies in `TARGETS`.
+
+**Validation:**
+```text
+just promote-skills
+just check-sync
+just check-prompt-parity
+just check-trunk-snippet-parity
+just lint-scripts
+```
+
+All five commands passed on 2026-05-06 after the Codex mirror adaptation.
+
+**Phase 6 boundary note:** Codex did not re-run Claude interactive slash-command behavioural fixtures (`mode-full`, `mode-pr`, continuation modes, worktree banner, or badge-flip transcripts). The live `~/.claude/usage-data/report.html` already reports PR #16 as shipped/promoted and currently has `grep -c 'NOT FIXED' == 3`; the remaining NOT FIXED badges/notes are conduct marker-hash related, so Codex did not flip them. `docs/dev_plans/CODEX_MIRROR_BACKLOG.md` now records that the PR #16 Codex mirror is parity-clean as of 2026-05-06.
 
 ### Post-Phase-5 deep-review pass (2026-05-04)
 
