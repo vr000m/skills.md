@@ -25,7 +25,7 @@ The remaining items need to be enforced **inside the skills** so the rules trigg
 1. **`deep-review`** — diff-scope and **worktree-identity** confirmation. Two distinct failure modes:
    - **Diff-scope**: worktree diff vs branch diff vs PR diff confused; banner never echoes resolved range.
    - **Worktree-identity**: when multiple Claude sessions share a repo via separate `git worktree`s, the harness state can lose track of which worktree's branch is current. After a commit lands, the next invocation may resolve `<base>..<head>` against a sibling worktree's branch instead of the active one. The fix anchors branch identity on `git rev-parse --show-toplevel` + `git branch --show-current` *from inside the worktree at every invocation*, ignoring any cached harness branch state, and surfaces concurrent worktrees as informational context.
-2. **`dev-plan`** — Explore freshness for git-ref references (tags, branches, commits) — point-in-time at create only.
+2. **`dev-plan`** — Explore freshness for git-ref references (tags, local branches, remote-tracking branches, commits) — point-in-time at create only.
 3. **`update-docs`** — sibling-plan auto-detection. Extend the existing dev-plan audit pass with slug + component matching; explicitly scope the audit to `docs/dev_plans/` and exclude `tests/fixtures/`.
 
 The three fixes are independent; they ship in one PR, one commit per skill. No dispatch contracts change.
@@ -65,7 +65,7 @@ The three fixes are independent; they ship in one PR, one commit per skill. No d
 - **[GENERIC]** **Point-in-time disclaimer (asymmetric to other fact categories).** Verification runs at `dev-plan create` only. A verified ref recorded above the marker is a fact-as-of-create, not a live invariant. `/conduct` does not re-verify; ref drift after create does **not** force re-review (asymmetric to path/pattern/dependency drift, which does). The asymmetry is documented in **one canonical location** — a new "Point-in-time facts" subsection in `dev-plan/SKILL.md` Constraints — referenced (not duplicated) by the rubric line and the prompt body. This avoids scattering the carve-out across three docs.
 - **[GENERIC]** Generic-block edit: the new category lives inside the `<!-- BEGIN GENERIC EXPLORE PROMPT -->` markers in `dev-plan/SKILL.md` (lines 107-159). Until Codex mirrors, byte-identity across `.claude/` and `.codex/` is intentionally broken — `[CODEX-DEFERRED]`.
 - **[GENERIC]** No change to dispatch.
-- **[GENERIC]** **Rubric update.** `dev-plan/rubric.md` gains exactly one new criterion verbatim: *"Git refs (tags, branches, commits) referenced in the request are listed as verified or unverified with point-in-time disclaimer; ref drift after create does not force re-review (asymmetric to paths/patterns/dependencies, which do)."*
+- **[GENERIC]** **Rubric update.** `dev-plan/rubric.md` gains exactly one new criterion verbatim: *"Git refs (tags, local branches, remote-tracking branches, commits) referenced in the request are listed as verified or unverified with point-in-time disclaimer; ref drift after create does not force re-review (asymmetric to paths/patterns/dependencies, which do)."*
 - **[GENERIC]** No `dev-plan/template.md` change needed.
 
 ### 3. `update-docs` — extend existing dev-plan audit with sibling-slug match
@@ -181,7 +181,7 @@ The three fixes are independent; they ship in one PR, one commit per skill. No d
   - `/deep-review` (no args) on a feature branch — invariant: contains `Reviewing: <branch> @`, exit code 0, no `Refusing to review` substring.
   - `/deep-review --pr <N>` (the merged PR number for this plan, locked in Phase 5) — invariant: matches `Reviewing: .* @ .* \| origin/[^.]+\.\.[0-9a-f]+ \(\d+ commits, \d+ files\)`.
   - `/deep-review --continue` after a prior run — invariant: contains `(resume)` tag.
-  - `/dev-plan create` — uses the path locked in Phase 0 (stdout-only OR throwaway branch). Invariant: Explore output includes `### Verified git refs` header **and** demonstrates all three ref-pattern forms. Construct the request to mention: a real branch (`feature/skill-improvements-from-usage-report`), a bogus tag (`v999.999.999`), and a `<name>@<sha>` form (`HEAD@deadbeefdeadbeefdeadbeefdeadbeefdeadbeef`). AC: at least one entry per pattern; unverified entries cite at least one of the three reason strings (`tag not found`, `branch tracks gone-remote`, `sha unknown`).
+  - `/dev-plan create` — uses the path locked in Phase 0 (stdout-only OR throwaway branch). Invariant: Explore output includes `### Verified git refs` header **and** demonstrates all three ref-pattern forms. Construct the request to mention: a real local branch (`feature/skill-improvements-from-usage-report`), a bogus tag (`v999.999.999`), and a `<name>@<sha>` form (`HEAD@deadbeefdeadbeefdeadbeefdeadbeefdeadbeef`). AC: at least one entry per pattern; unverified entries cite at least one of the four reason strings (`tag not found`, `branch not found`, `branch tracks gone-remote`, `sha unknown`).
   - `/update-docs` against a fixture README at `tests/fixtures/scratch-readme.md` (create the fixture file specifically for this baseline; commit it under `tests/fixtures/` if persistent verification is desired, otherwise revert post-capture). **Do not invoke against the repo root README.** Invariant: no `audit:` line in transcript (since target is not a dev plan).
   - **Slug-match positive baseline** — invoke `/update-docs` against this plan as primary with at least one synthetic sibling under `docs/dev_plans/` whose stripped slug shares ≥3 contiguous tokens (create the synthetic sibling for the baseline only, capture transcript, then revert). AC: transcript contains a `skipped: <slug> (<reason>)` line for the synthetic sibling, demonstrating the positive path.
   - **Filename-convention fallback** — invoke `/update-docs` against a hand-named plan (no `YYYYMMDD-` prefix; create solely for this baseline). AC: transcript contains the documented one-line fallback note.
@@ -220,7 +220,7 @@ The three fixes are independent; they ship in one PR, one commit per skill. No d
 - [ ] `deep-review` from a worktree when a sibling worktree exists prints the `Other worktrees present (informational):` line including the list of siblings. Worktree fixture cleaned up afterward (`git worktree list | wc -l == 1`). Verified by `worktree-banner` fixture.
 - [ ] `deep-review` on the configured trunk without `--pr`/`--continue` halts with the documented message and `.deep-review/latest-claude.json` does not exist after the halt (pre-state pinned via `rm -f`). Verified by `halt-trunk` fixture.
 - [ ] Cache-bypass behavior: either a positive fixture demonstrating bypass, or an explicit `## Findings` note that no harness cache surface exists.
-- [ ] `dev-plan` Explore output for a request mentioning a real branch (`feature/skill-improvements-from-usage-report`), a bogus tag (`v999.999.999`), and a `<name>@<sha>` form (`HEAD@deadbeef…`) includes one entry per pattern under `verified git refs` with the asymmetric subkeys; unverified entries cite at least one of the three documented reason strings (`tag not found`, `branch tracks gone-remote`, `sha unknown`).
+- [ ] `dev-plan` Explore output for a request mentioning a real local branch (`feature/skill-improvements-from-usage-report`), a bogus tag (`v999.999.999`), and a `<name>@<sha>` form (`HEAD@deadbeef…`) includes one entry per pattern under `verified git refs` with the asymmetric subkeys; unverified entries cite at least one of the four documented reason strings (`tag not found`, `branch not found`, `branch tracks gone-remote`, `sha unknown`).
 - [ ] `deep-review` per-invocation worktree-identity is verified by either (a) the `mode-worktree-identity-cross-branch` fixture (positive: branch-A then branch-B invocation banners differ), or (b) an explicit `## Findings` note that no harness cache surface exists AND the cross-branch fixture nonetheless demonstrates fresh resolution.
 - [ ] `dev-plan/rubric.md` includes the verbatim criterion: `grep -F 'point-in-time disclaimer; ref drift after create' .claude/skills/dev-plan/rubric.md` returns ≥1.
 - [ ] `deep-review/rubric.md` includes the verbatim criterion: `grep -F 'trunk-vs-trunk halt fires before any state-file write' .claude/skills/deep-review/rubric.md` returns ≥1.
@@ -278,9 +278,9 @@ User credits exhausted for this week — Codex mirror work resumes **after 2026-
 - Re-run `just check-trunk-snippet-parity` if the Codex mirrors of `deep-review`/`update-docs` carry the same snippet — extend `TARGETS` in the script if so.
 - Then proceed with Phase 6 (post-merge promotion + behavioural verification + badge flips).
 
-### Codex mirror parity completed (2026-05-06)
+### Codex mirror parity completed (2026-05-07)
 
-Codex adapted the PR #16 Claude-side changes into the Codex skill mirrors, preserving byte-identical rubric parity and shared generic prompt blocks while keeping Codex-native `spawn_agent`, model-tier, and `.deep-review/latest-codex.json` wording where the harnesses legitimately diverge.
+Codex adapted the PR #16 Claude-side changes into the Codex skill mirrors, preserving byte-identical rubric parity and shared generic prompt blocks while keeping Codex-native `spawn_agent`, model-tier, and `.deep-review/latest-codex.json` wording where the harnesses legitimately diverge. A follow-up review fix (`72ac72b`) tightened dev-plan Explore so local branch refs such as `feature/<name>` are recognized alongside remote-tracking branches.
 
 **Files mirrored/adapted:**
 - `.codex/skills/deep-review/SKILL.md`
@@ -299,7 +299,7 @@ just check-trunk-snippet-parity
 just lint-scripts
 ```
 
-All five commands passed on 2026-05-06 after the Codex mirror adaptation.
+All five commands passed on 2026-05-07 after the Codex mirror adaptation and local-branch-ref follow-up.
 
 **Phase 6 boundary note:** Codex did not re-run Claude interactive slash-command behavioural fixtures (`mode-full`, `mode-pr`, continuation modes, worktree banner, or badge-flip transcripts). The live `~/.claude/usage-data/report.html` already reports PR #16 as shipped/promoted and currently has `grep -c 'NOT FIXED' == 3`; the remaining NOT FIXED badges/notes are conduct marker-hash related, so Codex did not flip them. `docs/dev_plans/CODEX_MIRROR_BACKLOG.md` now records that the PR #16 Codex mirror is parity-clean as of 2026-05-06.
 

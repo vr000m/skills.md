@@ -16,10 +16,11 @@ Do not list ordinary harness-specific wording as drift. `SKILL.md` files may leg
 
 ## Current State
 
-As of 2026-05-06, the PR #16 Codex mirror is adapted and parity-clean:
+As of 2026-05-07, the PR #16 Codex mirror is adapted and parity-clean:
 
 - Source merge: `222644a` (`Merge pull request #16 from vr000m/feature/skill-improvements-from-usage-report`).
 - Source commits mirrored/adapted: `c318c2f`, `5e8f6ac`, `4131fd9`, `bbf3c1a`, `a082d4b`.
+- Codex follow-up fix: `72ac72b` (`dev-plan: recognize local branch refs in Explore`).
 - Codex files adapted:
   - `.codex/skills/deep-review/SKILL.md`
   - `.codex/skills/deep-review/rubric.md`
