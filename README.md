@@ -6,7 +6,7 @@ Reusable skills for [Claude Code](https://docs.anthropic.com/en/docs/claude-code
 
 | Skill | Claude | Codex | Description |
 |-------|--------|-------|-------------|
-| dev-plan | Yes | Yes | Generate and manage development plans; `create` runs one fresh-context Explore subagent that gathers verified paths, patterns, and dependency versions before drafting |
+| dev-plan | Yes | Yes | Generate and manage development plans; `create` runs one fresh-context Explore subagent that gathers verified paths, patterns, dependency versions, and git refs before drafting |
 | fan-out | Yes | Yes | Parallel agent orchestration via worktrees |
 | content-draft | Yes | Yes | Draft content following style guidelines |
 | content-review | Yes | Yes | Review content against style guidelines |

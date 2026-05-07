@@ -125,7 +125,7 @@ Return ONLY structured facts about the current working tree. You do NOT draft pl
 - **Verified paths** — exact paths the user request references that actually exist (read or `ls`-confirmed). For paths the request implies but you cannot verify, list under "unverified" with the reason. Do not invent paths.
 - **Observed patterns** — prevailing patterns in the target areas: each citing at least one concrete file and line range as evidence.
 - **Dependency versions** — relevant dependencies from `package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, or equivalent, with the manifest path and exact version string. If the relevant manifest does not exist, say so explicitly ("no `pyproject.toml` at repo root") rather than guessing.
-- **Verified git refs** — git refs (tags, branches, commits) explicitly mentioned in the user request. Match patterns: semver tags (`v\d+\.\d+\.\d+`), remote-tracking branches (`origin/<name>`), and ref-at-sha syntax (`<name>@<sha>`). Verify each with `git rev-parse --verify`. Report `verified` and `unverified` subkeys with the same shape as `verified paths`. Unverified entries cite a reason from: `tag not found`, `branch tracks gone-remote`, `sha unknown`. Git refs are point-in-time facts (see Constraints § Point-in-time facts); ref drift after create does NOT force re-review, asymmetric to paths/patterns/dependencies.
+- **Verified git refs** — git refs (tags, branches, commits) explicitly mentioned in the user request. Match patterns: semver tags (`v\d+\.\d+\.\d+`), local branch refs that look like branch paths (`feature/<name>`, `bug/<name>`, etc.) or are explicitly named as branches, remote-tracking branches (`origin/<name>`), and ref-at-sha syntax (`<name>@<sha>`). Verify each with `git rev-parse --verify` using the least-ambiguous namespace available (`refs/heads/<name>` for local branches, `refs/remotes/origin/<name>` for remote branches). Report `verified` and `unverified` subkeys with the same shape as `verified paths`. Unverified entries cite a reason from: `tag not found`, `branch not found`, `branch tracks gone-remote`, `sha unknown`. Git refs are point-in-time facts (see Constraints § Point-in-time facts); ref drift after create does NOT force re-review, asymmetric to paths/patterns/dependencies.
 
 ## Ignore (main agent owns these)
 
@@ -159,7 +159,7 @@ Produce well-formed markdown with these four headings (omit a heading only if th
 - verified:
   - `<ref>` — type: tag|branch|commit; resolves to `<sha>`.
 - unverified:
-  - `<ref>` — reason: tag not found | branch tracks gone-remote | sha unknown.
+  - `<ref>` — reason: tag not found | branch not found | branch tracks gone-remote | sha unknown.
 - (or: "no git refs mentioned in user request" when none match the recognised patterns)
 
 Each fact is one line or one short bullet — no narrative paragraphs. Do not draft plan prose. Do not propose changes.

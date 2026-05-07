@@ -43,7 +43,7 @@ Global is authoritative, repo is a mirror:
 
 Recommended development workflow using skills:
 
-1. `/dev-plan create feature xyz` — Create the plan; on `create` only, dispatches one fresh-context Explore subagent that returns structured codebase facts (verified paths, observed patterns, dependency versions) which land above the review marker. `update` and `complete` do not re-explore
+1. `/dev-plan create feature xyz` — Create the plan; on `create` only, dispatches one fresh-context Explore subagent that returns structured codebase facts (verified paths, observed patterns, dependency versions, verified git refs) which land above the review marker. `update` and `complete` do not re-explore
 2. `/review-plan` — Audit the plan by dispatching four parallel fresh-context lens agents (`architecture`, `sequencing`, `spec-and-testing`, `codebase-claims`); merges findings by severity, blocks until complete, and on acceptance writes a review marker footer consumed by `/conduct`. Cost: three high-reasoning lenses plus one cheap factual lens per run
 3. Address review findings, update plan as needed
 4. `/conduct` — Walk a reviewed linear plan phase by phase, delegating implementation + tests per phase to harness-native clean-context subagents while preserving the shared review-marker, phase-slot, report-schema, and handback contracts. State-file naming and resume-guard details may vary by harness implementation (pair with `/fan-out` at the outer layer when phases themselves fan out)

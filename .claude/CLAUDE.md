@@ -62,6 +62,56 @@ After completing a major task (commit, review, PR, skill run), assess the conver
 - **More related work remains**: Suggest `/compact focus on [specific next phase]`
 - **Work is done or next task is independent**: Suggest `/clear` or provide a self-contained prompt to continue in a new session. Include: the goal, what's done, what's left, relevant file paths, and the branch name.
 
+## Tool Output Discipline
+Raw Bash/Read/Grep output lands in the transcript verbatim and stays for the rest of the session. Treat context as a budget. Apply these rules in order:
+
+**1. Narrow inline commands before running them.** For commands I run myself, return only what I'll act on:
+- `git log --oneline -N`, not `git log`
+- `git diff --stat` or `--name-only` first; full diff only if needed
+- `grep -l` (filenames) or `grep -c` (counts) when I just need existence
+- `find ... | head -N`, `ls -1` not `ls -la` unless I need metadata
+- Pipe verbose tooling through `grep -E "error|fail|warn"` or `tail -50`
+- For Read, pass `limit`/`offset` when I know the region
+
+**1a. Prefer faster modern CLIs when available.** They're terser by default and respect `.gitignore`, which alone cuts a lot of noise. Probe with `command -v <tool>` once per session before relying on it; fall back to the POSIX equivalent if missing.
+- `rg` over `grep -r` / `find ... -exec grep` — faster, gitignore-aware, sensible defaults. `rg -l`, `rg -c`, `rg --files -g '*.ts'` for file listing.
+- `fd` over `find` — `fd pattern` instead of `find . -name '*pattern*'`. Defaults to gitignore-aware, shorter syntax.
+- `bat` over `cat` only when *I* need syntax-highlighted output for a human-facing summary; for tool reads, prefer the Read tool with `limit`/`offset`. `bat -p` (plain) if used in a pipe.
+- `eza`/`exa` over `ls` for tree views (`eza --tree --level=2`).
+- `jq` for JSON, `yq` for YAML — never grep structured data.
+- `delta` for diffs only in interactive contexts; not in tool output (it adds ANSI noise).
+
+**2. Delegate wide reads to a subagent with a shaped output contract.** When a task needs >3 lookups, spans multiple files, or produces structurally noisy output (test runs, build logs, multi-file audits), spawn an Agent. The subagent absorbs the raw tool noise; only its final message enters my context. Always specify the output contract in the prompt:
+- "Report under 150 words. Bullet list of `path:line` matches only."
+- "Return JSON: `{found: bool, paths: string[], reason: string}`."
+- "Yes/no with one sentence of justification. No raw output."
+- "Punch list: done vs missing. Under 200 words."
+
+For pure lookups, prefer `subagent_type: Explore`. For verification/yes-no checks, use `general-purpose` with `model: "haiku"` — the overhead is worth it when raw output would otherwise be large.
+
+**3. Decision rule — inline vs delegate:**
+| Situation | Choice |
+|---|---|
+| One-shot, output naturally <30 lines | Inline, narrowed |
+| Verbose by nature (build, test, deploy logs) | Inline + filter pipe, OR delegate if I only need a verdict |
+| >3 greps, multi-file audit, "where is X used" | Delegate to Explore |
+| Need yes/no, don't care about raw data | Delegate to Haiku subagent, ask for boolean |
+| Will re-reference the output later in this session | Inline (delegating discards the detail) |
+
+**4. Reuse prior reads, but verify freshness first.** If I already read a file this session, reuse that content — *unless* it may have changed since. The Edit/Write tools track state for files **I** modified, so re-reading after my own successful Edit is wasted. But the file may have changed for other reasons:
+- A subagent or parallel Agent ran and may have edited it (worktree isolation aside).
+- A PostToolUse hook rewrote it (e.g., `ruff format`, `prettier`, `eslint --fix`).
+- The user edited it in their editor between turns.
+- A build/codegen step (`tsc`, `protoc`, `cargo build`) regenerated it.
+- A `git` operation changed working tree state (checkout, stash pop, rebase, merge).
+
+Before relying on a cached read for a non-trivial decision (an Edit, a claim about contents, a security check), do a cheap freshness probe:
+- `git status --short <path>` — shows if the file is dirty vs my last view of HEAD.
+- `stat -f %m <path>` (macOS) / `stat -c %Y <path>` (Linux) — mtime check.
+- For files inside a subagent's likely scope, just re-Read; the round-trip is cheaper than acting on stale content.
+
+Rule of thumb: **read-then-edit in the same turn is safe; read-then-edit across a subagent call, hook fire, or user turn is not.**
+
 ## Security
 - Before committing, check staged files for PII, private keys, secrets, and credentials. Never commit these.
 

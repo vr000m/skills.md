@@ -43,4 +43,4 @@ Gradeable criteria for the structured-fact output produced by the dev-plan Explo
 
 ## Git Ref Coverage
 
-- Git refs (tags, branches, commits) referenced in the request are listed as verified or unverified with point-in-time disclaimer; ref drift after create does not force re-review (asymmetric to paths/patterns/dependencies, which do).
+- Git refs (tags, local branches, remote-tracking branches, commits) referenced in the request are listed as verified or unverified with point-in-time disclaimer; ref drift after create does not force re-review (asymmetric to paths/patterns/dependencies, which do).

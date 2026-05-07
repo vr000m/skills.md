@@ -20,6 +20,8 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 TARGETS=(
 	"$REPO_ROOT/.claude/skills/update-docs/SKILL.md"
 	"$REPO_ROOT/.claude/skills/deep-review/SKILL.md"
+	"$REPO_ROOT/.codex/skills/update-docs/SKILL.md"
+	"$REPO_ROOT/.codex/skills/deep-review/SKILL.md"
 )
 
 extract() {

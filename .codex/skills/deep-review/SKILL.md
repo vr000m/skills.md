@@ -41,6 +41,37 @@ plan, or branch diff to review when that target is ambiguous or missing.
 If a plan file is supplied, treat it as the author-supplied review brief. If the plan's branch does
 not match the current branch or the requested PR, call out the mismatch before proceeding.
 
+## Worktree Identity and Scope Check
+
+Branch identity is resolved **every invocation** via `git rev-parse --show-toplevel` (to obtain the worktree root) and `git branch --show-current` (to obtain the active branch), run from the current working directory at invocation time. Any harness-cached branch state is ignored. If the Codex harness exposes no such cache surface, this is a no-op contract: per-invocation resolution is the only path.
+
+Before doing anything else — and **before writing or updating `.deep-review/latest-codex.json`** — resolve worktree identity and validate scope:
+
+1. **Resolve worktree identity:**
+   ```
+   WORKTREE_ROOT=$(git rev-parse --show-toplevel)
+   BRANCH=$(git branch --show-current)
+   ```
+   If `$BRANCH` is empty (detached HEAD), use `(detached HEAD @ <short-sha>)` in place of `<branch>` in the pre-dispatch banner, and **skip** the trunk-vs-trunk halt below — a detached HEAD is by definition not a checked-out trunk branch.
+
+2. **Trunk-vs-trunk halt.** When invoked without `--pr` or `--continue` AND `$BRANCH` is non-empty, detect whether the current branch is trunk:
+   ```
+   BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@')
+   if [ -z "$BASE" ]; then
+     if git show-ref --verify --quiet refs/heads/main; then BASE=main
+     elif git show-ref --verify --quiet refs/heads/master; then BASE=master
+     else BASE=""; fi
+   fi
+   ```
+   If neither `origin/HEAD` nor a local `main`/`master` exists, treat the repo as having no configured trunk and skip the halt entirely (do **not** fall back to the lexicographically-first local branch — that would spuriously halt single-branch repos where the only branch is the feature branch).
+   If `$BASE` is non-empty and `$BRANCH == $BASE`, **halt immediately** with:
+   ```
+   Refusing to review trunk against itself — pass --pr <N> or check out a feature branch.
+   ```
+   The halt fires **before** any `.deep-review/latest-codex.json` write. A subsequent `--continue` from a feature branch must not be poisoned by a prior aborted trunk invocation.
+
+> **Note on trunk-resolution snippet duplication.** The `git symbolic-ref refs/remotes/origin/HEAD` + main/master fallback snippet above is duplicated verbatim from `update-docs/SKILL.md`. SKILL.md files are prose prompts with no include mechanism in this repo, so duplication is the available pattern. If a third skill needs trunk resolution, copy the snippet verbatim from `update-docs/SKILL.md` and add a grep-based parity check in `scripts/` to keep the copies in sync.
+
 ## Review Focus
 
 If the chosen plan includes `## Review Focus`, use it to:
@@ -190,21 +221,59 @@ If the documentation is up to date, say so concisely.
 
 ## Orchestration
 
-1. Resolve the target diff and any matching plan brief.
+1. Resolve worktree identity, run the trunk-vs-trunk halt, and determine the target diff and any matching plan brief.
 2. Read repo-root `AGENTS.md` from the merge base if it exists there and load the `## Review
    Checklist` section if present.
 3. After input resolution is complete, print a single-line run summary before spawning lenses.
    Include the lens list, model mapping, and any skipped lenses. Do not ask for an additional
    confirmation after this summary; proceed immediately unless the user interrupts.
-4. If subagent delegation is available, spawn all enabled lens subagents with clean context. Use
+4. Print the resolved-range pre-dispatch banner before spawning any lens agents. The banner is the scope-confirmation gate.
+5. If subagent delegation is available, spawn all enabled lens subagents with clean context. Use
    `spawn_agent` semantics, not worktrees or CLI-level process fan-out.
-5. If subagent delegation is unavailable in the current Codex environment, run the same enabled
+6. If subagent delegation is unavailable in the current Codex environment, run the same enabled
    lenses sequentially in the main session using the same prompt contract and findings format rather
    than failing the review.
-6. Wait for every lens to finish, then consolidate and deduplicate findings.
-7. If delegation was used, close every completed or failed lens agent after its result has been
+7. Wait for every lens to finish, then consolidate and deduplicate findings.
+8. If delegation was used, close every completed or failed lens agent after its result has been
    captured. Keep an agent open only if the review is intentionally paused and you expect to resume
    that exact agent later.
+
+## Pre-Dispatch Banner
+
+**Before spawning any lens subagents**, print the resolved-range banner. This is the "Confirm scope before dispatch" gate — the banner output is the proceed signal.
+
+Resolve the diff range based on the current mode:
+
+- **`--continue` resume mode** (HEAD == stored `head_commit`, state file present, schema version matches): banner shows the **stored** range with a `(resume)` tag:
+  ```
+  Reviewing: <branch> @ <worktree-root> | <stored-base>..<stored-head> (<N> commits, <M> files) (resume)
+  ```
+- **`--continue` schema-mismatch or missing-state-file fallback**: print the schema-mismatch warning first, then behave as `--full` — fresh-resolved range, no `(resume)` tag:
+  ```
+  Warning: state file missing or schema mismatch — falling back to full review.
+  Reviewing: <branch> @ <worktree-root> | <merge-base>..<HEAD> (<N> commits, <M> files)
+  ```
+- **`--continue` force-push/rebase/branch-switch fallback** (stored `head_commit` is not an ancestor of `HEAD`): print the existing fallback warning and **append** the resolved-range banner:
+  ```
+  Warning: stored head is not an ancestor of HEAD (force-push, rebase, or branch switch) — falling back to full review.
+  Reviewing: <branch> @ <worktree-root> | <merge-base>..<HEAD> (<N> commits, <M> files)
+  ```
+- **`--pr <N>` mode**: `<base>..<head>` resolves to `origin/<base-branch>..<pr-head-sha>` (the GitHub PR base and head):
+  ```
+  Reviewing: <branch> @ <worktree-root> | origin/<base-branch>..<pr-head-sha> (<N> commits, <M> files)
+  ```
+- **Full or incremental modes** (no prior state or HEAD advanced): fresh-resolved range:
+  ```
+  Reviewing: <branch> @ <worktree-root> | <base>..<head> (<N> commits, <M> files)
+  ```
+
+**Concurrent-worktree informational line.** Run `git worktree list` here (single call, inline — do not split detection across sections). If the output has more than one active worktree, append a second line immediately after the banner:
+```
+Other worktrees present (informational): <count> (<root1>, <root2>, ...); anchored to <worktree-root>
+```
+Use the word "informational" (not "warning") — this is context, not an error. The list of other worktrees is included so the user can confirm the correct one is active.
+
+After printing the banner (and the optional informational line), proceed with the run. The banner is the confirm-scope gate; no additional prompt is needed.
 
 ## Persisted Run State
 
