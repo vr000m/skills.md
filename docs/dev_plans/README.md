@@ -4,7 +4,6 @@
 
 | Date | Type | Name | Status | Branch | Plan |
 |------|------|------|--------|--------|------|
-| 2026-05-04 | feature | skill-improvements-from-usage-report | In Review | feature/skill-improvements-from-usage-report | `docs/dev_plans/20260504-feature-skill-improvements-from-usage-report.md` |
 | 2026-05-01 | feature | plan-progress-section | In Review | feature/plan-progress-section | N/A (small refactor) |
 | 2026-05-01 | fix | conduct-em-dash-headings | Merged | feature/conduct-em-dash-headings | N/A (small fix) |
 | 2026-04-22 | feature | deep-review-incremental-continuation | In Review | feature/deep-review-incremental-continuation | N/A (small refactor) |
@@ -14,6 +13,7 @@
 
 | Date | Type | Name | Status | Branch | Plan |
 |------|------|------|--------|--------|------|
+| 2026-05-04 | feature | skill-improvements-from-usage-report | Complete | feature/skill-improvements-from-usage-report | `docs/dev_plans/20260504-feature-skill-improvements-from-usage-report.md` |
 | 2026-03-15 | feature | review-plan-skill | Complete | feat/review-plan-skill | N/A (small feature) |
 | 2026-03-13 | feature | spec-compliance-check | Complete | feat/rfc-finder-skill | `docs/dev_plans/20260313-feature-spec-compliance-check.md` |
 | 2026-03-13 | feature | rfc-finder | Complete | feat/rfc-finder-skill | `docs/dev_plans/20260313-feature-rfc-finder.md` |
