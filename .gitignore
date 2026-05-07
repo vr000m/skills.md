@@ -4,4 +4,4 @@
 .conduct/
 __pycache__/
 .pytest_cache/
-.conduct/
+.phase6-fixture

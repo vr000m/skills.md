@@ -303,6 +303,128 @@ All five commands passed on 2026-05-07 after the Codex mirror adaptation and loc
 
 **Phase 6 boundary note:** Codex did not re-run Claude interactive slash-command behavioural fixtures (`mode-full`, `mode-pr`, continuation modes, worktree banner, or badge-flip transcripts). The live `~/.claude/usage-data/report.html` already reports PR #16 as shipped/promoted and currently has `grep -c 'NOT FIXED' == 3`; the remaining NOT FIXED badges/notes are conduct marker-hash related, so Codex did not flip them. `docs/dev_plans/CODEX_MIRROR_BACKLOG.md` now records that the PR #16 Codex mirror is parity-clean as of 2026-05-07. Phase 6 itself (Claude promotion, behavioural fixtures, badge flips) remains open.
 
+### Phase 6 — behavioural fixture captures (2026-05-07, in progress)
+
+Captured against the post-PR-#17 promoted skills (`promote-skills` ran from `main` at `21101c7` after PR #17 merge). Throwaway branches: `phase6/fixture-capture` and `fixture-branch-b`. Fixture seed file `.phase6-fixture` is now `.gitignore`d on `main` to avoid future accidental tracking.
+
+**Status:** 8/8 deep-review fixtures captured. `/dev-plan create` baseline captured. Remaining: `/update-docs` baselines, sibling-audit self-test, cache-bypass note, badge flips, plan completion.
+
+#### `mode-full`
+
+```
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..845466a (1 commits, 1 files)
+```
+
+Branch resolved via `git branch --show-current`; worktree-root via `git rev-parse --show-toplevel`. No trunk-vs-trunk halt (branch ≠ main). No concurrent-worktree informational line (single worktree). State file `.deep-review/latest-claude.json` written with schema 1.
+
+#### `mode-continue-resume`
+
+```
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | 21101c759ab0dd4b..845466a07d094238 (1 commits, 1 files) (resume)
+```
+
+`(resume)` tag present; stored `head_commit` `845466a07d0942383cbb4c48a57e63a4bab88f7c` echoed; range matches stored `base..head`, not freshly resolved. No completed lenses re-dispatched.
+
+#### `mode-continue-schema-mismatch`
+
+Pre-state: `echo '{}' > .deep-review/latest-claude.json` (schema_version absent).
+
+```
+Warning: state file missing or schema mismatch — falling back to full review.
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..845466a (1 commits, 1 files)
+```
+
+Warning printed first; banner shows fresh-resolved range; **no `(resume)` tag**. State file rewritten with schema 1 post-run.
+
+#### `mode-continue-fallback`
+
+Pre-state: `git commit --amend --no-edit` to invalidate stored `head_commit` (stored `845466a` is no longer an ancestor of new HEAD `fe784ba`).
+
+```
+Warning: stored head is not an ancestor of HEAD (force-push, rebase, or branch switch) — falling back to full review.
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..fe784ba (1 commits, 1 files)
+```
+
+Existing fallback warning printed first; resolved-range banner appended.
+
+#### `mode-pr`
+
+Invocation: `/deep-review --pr 17`.
+
+```
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | origin/main..769f05279481bf7d6b0a419074f9d485594a6cc3 (7 commits, 14 files)
+```
+
+Banner matches the AC regex `Reviewing: .* @ .* \| origin/[^.]+\.\.[0-9a-f]+ \(\d+ commits, \d+ files\)`.
+
+#### `mode-worktree-identity-cross-branch`
+
+```
+=== Banner A (on phase6/fixture-capture) ===
+Reviewing: phase6/fixture-capture @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..fe784ba (1 commits, 1 files)
+
+=== Banner B (after `git checkout fixture-branch-b`) ===
+Reviewing: fixture-branch-b @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..fe784ba (1 commits, 1 files)
+```
+
+Branch identity changes between banners; worktree-root unchanged (same checkout). Confirms per-invocation `git branch --show-current` resolution; no cache leakage.
+
+#### `halt-trunk`
+
+Pre-state: `rm -f .deep-review/latest-claude.json` (clean), then `git checkout main`.
+
+```
+Refusing to review trunk against itself — pass --pr <N> or check out a feature branch.
+```
+
+Post-condition: `! -f .deep-review/latest-claude.json` ✅ — halt fired before any state-file write. Trunk detected via `git symbolic-ref refs/remotes/origin/HEAD` → `main` matching `BRANCH=main`.
+
+#### `worktree-banner`
+
+Pre-state: `git worktree add ../skills.md-sibling`.
+
+```
+Reviewing: fixture-branch-b @ /Users/vr000m/Code/vr000m/skills.md | 21101c7..fe784ba (1 commits, 1 files)
+Other worktrees present (informational): 1 (/Users/vr000m/Code/vr000m/skills.md-sibling); anchored to /Users/vr000m/Code/vr000m/skills.md
+```
+
+Word "informational" used (not "warning"). Cleanup: `git worktree remove ../skills.md-sibling && git worktree prune` → `git worktree list | wc -l == 1` ✅.
+
+#### `/dev-plan create` baseline (Explore output)
+
+Stdout-only baseline against a synthetic feature request mentioning all four ref-pattern forms. No plan file written.
+
+```
+### Verified paths
+- /Users/vr000m/Code/vr000m/skills.md/.claude/skills/dev-plan/SKILL.md — dev-plan skill definition; contains the Explore prompt and all Explore constraints.
+- /Users/vr000m/Code/vr000m/skills.md/.claude/skills/dev-plan/rubric.md — Explore output rubric.
+- /Users/vr000m/Code/vr000m/skills.md/.claude/skills/dev-plan/template.md — plan template.
+- /Users/vr000m/Code/vr000m/skills.md/.github/workflows/ — directory exists but is empty.
+
+Unverified:
+- .github/workflows/<any CI file> — workflows/ directory exists but is empty.
+- feature/skill-improvements-from-usage-report — branch not found (deleted on PR #16 merge).
+
+### Observed patterns
+- Verified git refs category in Explore output — evidence: SKILL.md:128, rubric.md:43-46.
+- <untrusted-content> wrapping with attacker-control warning — SKILL.md:103-113, 107-166.
+- Verified/unverified subkey shape — SKILL.md:159-163.
+- Rubric self-check gate — SKILL.md:169.
+
+### Dependency versions
+- No package.json, pyproject.toml, Cargo.toml, or go.mod at repo root.
+
+### Verified git refs
+- verified:
+  - origin/main — type: remote-tracking branch; resolves to 21101c759ab0dd4be68a8ff682bcd10d37075b97.
+- unverified:
+  - v999.999.999 — reason: tag not found.
+  - feature/skill-improvements-from-usage-report — reason: branch not found.
+  - HEAD@deadbeefdeadbeefdeadbeefdeadbeefdeadbeef — reason: sha unknown.
+```
+
+AC met: `### Verified git refs` header present; all four pattern forms exercised (tag, local branch, remote-tracking, ref@sha); both `verified` and `unverified` subkeys populated; three of the four documented reason strings used (`tag not found`, `branch not found`, `sha unknown`); the fourth reason `branch tracks gone-remote` is unexercised in this baseline (no orphaned remote-tracking ref in the test request).
+
 ### Post-Phase-5 deep-review pass (2026-05-04)
 
 Run on the full PR diff after Phase 5. **Critical: 0; Important: 3; Minor: 2.** All five fixed in one fix-up commit on the PR.
